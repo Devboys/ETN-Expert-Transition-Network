@@ -1,1 +1,14 @@
+/models/
+venv
+*/venv
+*.idea
+
+*__pycache__
+*.pyc
+
+*.txtchars
+cache.npz
+*.npz
+*.pt
+tensorboard
 /data/lafan1/*
