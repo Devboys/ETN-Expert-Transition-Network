@@ -10,23 +10,22 @@ from utils_print import print_hierarchy, print_sequences
 def run():
     basedir = str(pathlib.Path(__file__).parent.parent.absolute())
     batch_size = 32
-    n_batches = 15000
+    n_batches = 1000
     learning_rate = 0.0005
     num_joints = 22
-    data_folder = "lafan1"
+    data_name = "lafan1"
     model_postfix = ""
 
     model_path = \
-        f"models/etn_{data_folder}{model_postfix}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
+        f"models/etn_{data_name}{model_postfix}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
 
-    train_data = ETNDataset(f"{basedir}/data/{data_folder}/train", joint_count=num_joints)
+    train_data = ETNDataset(f"{basedir}/data/{data_name}/train", joint_count=num_joints)
     train_loader = DataLoader(train_data, batch_size=batch_size)
-    val_data = ETNDataset(f"{basedir}/data/{data_folder}/val", joint_count=num_joints, train_data=train_data)
+    val_data = ETNDataset(f"{basedir}/data/{data_name}/val", joint_count=num_joints, train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=batch_size)
 
     generator = ETNGenerator(
         learning_rate=learning_rate,
-        prefix=f"etn_{data_folder}_{model_postfix}",
         num_joints=num_joints,
         use_gan=False
     )

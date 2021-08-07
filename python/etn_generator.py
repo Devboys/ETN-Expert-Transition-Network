@@ -2,8 +2,10 @@ from torch import nn
 from torch.utils.data import DataLoader
 import torch as t
 import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 from utils_fk import torch_forward_kinematics_batch
+from utils_tensorboard import *
 
 
 class Encoder(nn.Module):
@@ -71,7 +73,13 @@ class Decoder(nn.Module):
 
 
 class ETNGenerator(nn.Module):
-    def __init__(self, prefix, learning_rate=1e-3, num_joints=22, use_gan=False):
+    def __init__(self, learning_rate=1e-3, num_joints=22, use_gan=False):
+        """
+
+        :param learning_rate:
+        :param num_joints:
+        :param use_gan:
+        """
         super().__init__()
         self.num_joints = num_joints
         self.c_size = 4  # Contact information size (2 bools pr foot)
@@ -96,10 +104,12 @@ class ETNGenerator(nn.Module):
         self.optimizer = t.optim.Adam(self.parameters(), lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.to(self.device)
-        # TODO: Tensorboard writers here, maybe
         self.batch_idx = 0
         self.LOSS_MODIFIER_G = 0.1
         self.LOSS_MODIFIER_P = 0.5
+
+        self.train_writer = None
+        self.val_writer = None
 
     def __step(self,
                root_vel: t.Tensor,
@@ -291,7 +301,6 @@ class ETNGenerator(nn.Module):
 
             glob_poses = self.__fk(joint_offsets, poses, parents)
 
-            # TODO: why do we report loss here?
             loss = self.__loss(
                 frames=poses,
                 gt_frames=ground_truth[:, 10:],
@@ -300,7 +309,7 @@ class ETNGenerator(nn.Module):
                 positions=glob_poses,
                 gt_positions=global_positions[:, 10:]
             )
-        # TODO: report validation loss here
+        self.__report_loss(self.val_writer, loss)
 
         return glob_poses, parents, poses  # poses is concat vector, only extract rots.
 
@@ -328,12 +337,25 @@ class ETNGenerator(nn.Module):
         frames = frames.view(batch_size, frame_count, self.num_joints*3)
         return frames
 
+    def __report_loss(self, writer: SummaryWriter, loss):
+        """
+        Writes a loss scalar to the given summary writer.
+        :param writer: The SummaryWriter to write to
+        :param loss: The loss to report.
+        """
+        if writer is not None:
+            writer.add_scalar("loss/loss", loss.item(), self.batch_idx)
+
     def do_train(self,
                  train_data: DataLoader,
                  n_train_batches: int,
                  val_data: DataLoader,
                  val_frequency=10
                  ):
+
+        # Set train and val writer
+        self.train_writer, self.val_writer = get_writers("etn")
+
         data_iter = iter(train_data)
         pbar = tqdm.tqdm(range(n_train_batches))
 
@@ -364,7 +386,7 @@ class ETNGenerator(nn.Module):
             # Backpropagate and optimize
             loss.backward()
             self.optimizer.step()
-            # TODO: report loss here
+            self.__report_loss(self.train_writer, loss)
             pbar.set_description(f"Training generator. Loss {loss}")
             self.optimizer.zero_grad()
 
@@ -397,4 +419,5 @@ class ETNGenerator(nn.Module):
         self.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.batch_idx = checkpoint["batch_idx"]
+
 
