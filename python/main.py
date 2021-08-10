@@ -1,31 +1,38 @@
+import sys
 import pathlib
 from pathlib import Path
+import uuid
 from torch.utils.data import DataLoader
+import numpy as np
 
 from etn_generator import ETNGenerator
 from etn_dataset import ETNDataset
 from utils_print import print_hierarchy, print_sequences
 
 
-def run():
+def run(base_dir, is_param_optimizing: bool):
     basedir = str(pathlib.Path(__file__).parent.parent.absolute())
-    data_name = "lafan1"
-    model_postfix = ""
     num_joints = 22
-    pc_name = "NaN"
+    model_id = str(uuid.uuid4())[:8] if is_param_optimizing else "NaN"
+    tensorboard_dir = f"{base_dir}/tensorboard/"
+    model_dir = f"{base_dir}/models/"
 
     # HYPERPARAMS
     batch_size = 32
-    n_batches = 10000  # i.e. training length
+    n_batches = 1  # i.e. training length
     learning_rate = 0.0005
 
+    if is_param_optimizing:
+        # for hyperparam optimization, learning rate is a random float between 0.0001 and 0.1
+        power = -3 * np.random.rand()
+        learning_rate = 10**(-1 + power)
 
-    model_path = \
-        f"models/{pc_name}_etn_{data_name}{model_postfix}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
+    model_name = f"etn_{model_id}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
+    model_path = model_dir + model_name
 
-    train_data = ETNDataset(f"{basedir}/data/{data_name}/train", joint_count=num_joints)
+    train_data = ETNDataset(f"{basedir}/data/lafan1/train", joint_count=num_joints)
     train_loader = DataLoader(train_data, batch_size=batch_size)
-    val_data = ETNDataset(f"{basedir}/data/{data_name}/val", joint_count=num_joints, train_data=train_data)
+    val_data = ETNDataset(f"{basedir}/data/lafan1/val", joint_count=num_joints, train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=batch_size)
 
     generator = ETNGenerator(
@@ -63,8 +70,8 @@ def run():
 
         print_sequences(pred_quats, org_quats, org_root_pos, pred_root_pos, val_data.joint_names, "prediction", 30)
     else:
-        generator.do_train(train_loader, n_batches, val_loader)
+        generator.do_train(train_loader, model_id, tensorboard_dir, n_batches, val_loader)
         generator.save(model_path)
 
 
-run()  # Encapsulate run behaviour to prevent globals
+run(sys.path[0], True)  # Encapsulate run behaviour to prevent globals

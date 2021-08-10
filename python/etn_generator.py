@@ -100,7 +100,6 @@ class ETNGenerator(nn.Module):
         self.decoder = Decoder(512, 512, 256, self.q_size + self.r_size + self.c_size)
 
         # TODO (2): gan here
-
         self.optimizer = t.optim.Adam(self.parameters(), lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
         self.device = "cuda" if t.cuda.is_available() else "cpu"
         self.to(self.device)
@@ -110,6 +109,9 @@ class ETNGenerator(nn.Module):
 
         self.train_writer = None
         self.val_writer = None
+
+        #global info
+        self.lr = learning_rate
 
     def __step(self,
                root_vel: t.Tensor,
@@ -348,13 +350,15 @@ class ETNGenerator(nn.Module):
 
     def do_train(self,
                  train_data: DataLoader,
+                 model_id: str,
+                 log_dir: str,
                  n_train_batches: int,
                  val_data: DataLoader,
                  val_frequency=10
                  ):
 
         # Set train and val writer
-        self.train_writer, self.val_writer = get_writers("etn")
+        self.train_writer, self.val_writer = get_writers(log_dir, f"etn_{model_id}_lr{self.lr}")
 
         data_iter = iter(train_data)
         pbar = tqdm.tqdm(range(n_train_batches))
