@@ -12,14 +12,16 @@ def run():
     data_name = "lafan1"
     model_postfix = ""
     num_joints = 22
+    pc_name = "NaN"
 
     # HYPERPARAMS
     batch_size = 32
-    n_batches = 1000  # i.e. training length
+    n_batches = 10000  # i.e. training length
     learning_rate = 0.0005
 
+
     model_path = \
-        f"models/etn_{data_name}{model_postfix}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
+        f"models/{pc_name}_etn_{data_name}{model_postfix}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
 
     train_data = ETNDataset(f"{basedir}/data/{data_name}/train", joint_count=num_joints)
     train_loader = DataLoader(train_data, batch_size=batch_size)
