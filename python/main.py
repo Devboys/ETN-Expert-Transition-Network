@@ -9,12 +9,14 @@ from utils_print import print_hierarchy, print_sequences
 
 def run():
     basedir = str(pathlib.Path(__file__).parent.parent.absolute())
-    batch_size = 32
-    n_batches = 1000
-    learning_rate = 0.0005
-    num_joints = 22
     data_name = "lafan1"
     model_postfix = ""
+    num_joints = 22
+
+    # HYPERPARAMS
+    batch_size = 32
+    n_batches = 1000  # i.e. training length
+    learning_rate = 0.0005
 
     model_path = \
         f"models/etn_{data_name}{model_postfix}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
