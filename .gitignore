@@ -12,3 +12,4 @@ cache.npz
 *.pt
 tensorboard
 /data/lafan1/*
+/data/lafan1_reduced/*
