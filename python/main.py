@@ -30,9 +30,9 @@ def run(base_dir, is_param_optimizing: bool):
     model_name = f"etn_{model_id}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
     model_path = model_dir + model_name
 
-    train_data = ETNDataset(f"{basedir}/data/lafan1/train", joint_count=num_joints)
+    train_data = ETNDataset(f"{basedir}/data/lafan1_reduced/train", joint_count=num_joints)
     train_loader = DataLoader(train_data, batch_size=batch_size)
-    val_data = ETNDataset(f"{basedir}/data/lafan1/val", joint_count=num_joints, train_data=train_data)
+    val_data = ETNDataset(f"{basedir}/data/lafan1_reduced/val", joint_count=num_joints, train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=batch_size)
 
     generator = ETNGenerator(

@@ -34,8 +34,8 @@ class ETNDataset(IterableDataset):
 
         self.joint_count = joint_count
         # Toebase and ankle joint indices for feet, should be adjusted to the used data set. For contact-calculations.
-        self.leftFootJoint = [3, 4]
-        self.rightFootJoint = [7, 8]
+        self.lfoot_idx = [3, 4]
+        self.rfoot_idx = [7, 8]
         # Velocity threshold value for contact-calculations
         self.velfactor = 0.02
 
@@ -86,7 +86,7 @@ class ETNDataset(IterableDataset):
                 root, quats, root_offsets, quat_offsets, target_frame, joint_offsets, parents, global_positions, \
                     contacts = self.animations[idx]
 
-                ground_truth = np.concatenate([root[1:], quats[1:]], axis=1)
+                ground_truth = np.concatenate([root, quats], axis=1)
                 yield root, quats, root_offsets, quat_offsets, target_frame, joint_offsets, parents.astype(int), \
                     ground_truth, global_positions, contacts
 
@@ -111,7 +111,7 @@ class ETNDataset(IterableDataset):
         for window_index in range(1, len(animation), window_step):
             frames = animation[window_index: window_index + window_size]
             if len(frames) != window_size:
-                continue  # Skip samples with too few frames (end samples)
+                continue  # Skip samples with too few frames
 
             # Frame info vector(s)
             frames_copy = deepcopy(frames[1:])
@@ -126,18 +126,15 @@ class ETNDataset(IterableDataset):
             # Target vector(s)
             target_frame = frames[-1, 3:]  # Note: This is quats only.
 
-            # Global join positions (through FK)
+            # Global joint positions (through FK)
             global_positions = np_forward_kinematics_batch(
                 np.repeat(joint_offsets.reshape([1, self.joint_count, 3]), window_size - 1, 0),
                 np.concatenate([root_vel, quats], axis=1), parents, joint_count=self.joint_count)
 
             # Contacts
             pos = global_positions.reshape((41, 22, 3))  # TODO (2): base on global var instead of static "22"
-            l_foot = (pos[1:, self.leftFootJoint, :] - pos[:-1, self.leftFootJoint, :]) ** 2
-            r_foot = (pos[1:, self.rightFootJoint, :] - pos[:-1, self.rightFootJoint, :]) ** 2
-            contacts_l = (np.sum(l_foot, axis=-1) < self.velfactor)
-            contacts_r = (np.sum(r_foot, axis=-1) < self.velfactor)
-            contacts = np.concatenate([contacts_l, contacts_r], axis=1)
+            contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
+            contacts = np.concatenate(contacts, axis=1)
 
             processed_data.append(np.array([
                 root_vel,
@@ -147,7 +144,30 @@ class ETNDataset(IterableDataset):
                 target_frame,
                 joint_offsets,
                 parents,
-                global_positions[1:],
+                global_positions,
                 contacts
             ], dtype=object))
         return np.array(processed_data)
+
+    def extract_feet_contacts(self, pos, lfoot_idx, rfoot_idx, vel_threshold = 0.02):
+        """
+        Extracts binary tensors of feet contacts
+
+        :param pos: tensor of global positions of shape [n_frames, n_joints, 3]
+        :param lfoot_idx: hierarchy indices of left foot joints (heel_idx, toe_idx)
+        :param rfoot_idx: hierarchy indices of right foot joints (heel_idx, toe_idx)
+        :param vel_threshold: velocity threshold to consider a joint moving or not.
+        :return: binary tensors of (left foot contacts, right foot contacts) pr frame. Last frame is duplicated once.
+        """
+
+        lfoot_xyz = (pos[1:, lfoot_idx, :] - pos[:-1, lfoot_idx, :]) ** 2
+        contacts_l = (np.sum(lfoot_xyz, axis=-1) < vel_threshold)
+
+        rfoot_xyz = (pos[1:, rfoot_idx, :] - pos[:-1, rfoot_idx, :]) ** 2
+        contacts_r = (np.sum(rfoot_xyz, axis=-1) < vel_threshold)
+
+        # Duplicate the last frame for shape consistency. Offset shouldn't be a problem because velocities are averages
+        contacts_l = np.concatenate([contacts_l, contacts_l[-1:]], axis=0)
+        contacts_r = np.concatenate([contacts_r, contacts_r[-1:]], axis=0)
+
+        return np.asarray(contacts_l), np.asarray(contacts_r)

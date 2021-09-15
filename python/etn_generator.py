@@ -173,7 +173,8 @@ class ETNGenerator(nn.Module):
                   quat_offsets_in: t.Tensor,
                   target_quats: t.Tensor,
                   contacts_in: t.Tensor,
-                  target_root_pos: t.Tensor
+                  target_root_pos: t.Tensor,
+                  transition_length=30
                   ):
         """
         Performs an entire forward pass of the network, stepping through the past context and predicting an entire
@@ -204,7 +205,7 @@ class ETNGenerator(nn.Module):
         # TODO: generate base gauss noise for z_target calculations in step-function here.
 
         # PAST CONTEXT
-        for frame_index in range(10):
+        for frame_index in range(quats_in.shape[1]):
             # tta = 40 - frame_index
 
             # Step through past context frames to initialize vars for first frame of transition
@@ -232,7 +233,7 @@ class ETNGenerator(nn.Module):
         sequence_contacts.append(contacts)
 
         # TRANSITION
-        for frame_index in range(29):
+        for frame_index in range(transition_length - 1):  # -1 because last frame of past-context predicts the first frame of transition.
             # tta = 30 - frame_index
             root, quats, contacts, lstm_state = self.__step(
                 root_vel=root,
@@ -271,7 +272,7 @@ class ETNGenerator(nn.Module):
         :param gt_positions: Ground truth global joint positions
         :return: Accumulated loss of the entire transition
         """
-        mae = lambda x, y: t.mean(t.abs(y - x))  # Lambda function for mean absolute error (MAE)
+        mae = lambda x, y: t.mean(t.abs(y - x))  # Mean absolute error (MAE)
 
         loss = mae(frames, gt_frames)
         loss += mae(contacts, gt_contacts) * self.LOSS_MODIFIER_G
@@ -305,11 +306,11 @@ class ETNGenerator(nn.Module):
 
             loss = self.__loss(
                 frames=poses,
-                gt_frames=ground_truth[:, 10:],
+                gt_frames=ground_truth[:, 10:-1], # skip last (target) frame
                 contacts=out_contacts,
-                gt_contacts=contacts[:, 10:],
+                gt_contacts=contacts[:, 10:-1], # skip last (target) frame
                 positions=glob_poses,
-                gt_positions=global_positions[:, 10:]
+                gt_positions=global_positions[:, 10:-1] # skip last (target) frame
             )
         self.__report_loss(self.val_writer, loss)
 
@@ -384,7 +385,7 @@ class ETNGenerator(nn.Module):
             glob_poses = self.__fk(joint_offsets, poses, parents,)
 
             # Calculate loss
-            loss = self.__loss(poses, ground_truth[:, 10:], c, contacts[:, 10:], glob_poses, global_positions[:, 10:])
+            loss = self.__loss(poses, ground_truth[:, 10:-1], c, contacts[:, 10:-1], glob_poses, global_positions[:, 10:-1]) # skipping last (target) frames
             assert t.isfinite(loss), f"loss is not finite: {loss}"
 
             # Backpropagate and optimize
