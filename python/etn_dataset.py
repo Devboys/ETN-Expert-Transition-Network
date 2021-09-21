@@ -59,6 +59,7 @@ class ETNDataset(IterableDataset):
             with np.load(cache_path, allow_pickle=True) as data:
                 self.animations = data["animations"]
                 self.hierarchy = HierarchyDefinition(data["bone_names"], data["bone_offsets"], data["parent_ids"])
+                self.file_indices = data["file_indices"]
         else:
             # Load data from files and cache
             bvh_paths = glob.glob(data_dir + "/*.bvh")
@@ -69,17 +70,30 @@ class ETNDataset(IterableDataset):
                                                  bone_offsets=sample_anim.joints_offsets,
                                                  parent_ids=sample_anim.joints_parent_ids
                                                  )
-            # Load and format all bvh animations into input-vectors.
-            self.animations = np.concatenate([
-                self.to_etn_input(BVHAnimation(file), subsample_factor) for file in
-                tqdm.tqdm(bvh_paths, desc=f"Loading bvh files from {data_dir}. This will only happen once.")
-                ])
+            anims = list()
+            file_start_idx = 0
+            file_end_idx = -1
+            self.file_indices = list()
+            # Load all bvh files and format animations into expected input format.
+            for file in tqdm.tqdm(bvh_paths, desc=f"Loading bvh files from {data_dir}. This will only happen once."):
+                parsed_file = self.to_etn_input(BVHAnimation(file), subsample_factor)
+                anims.append(parsed_file)
+
+                file_end_idx += len(parsed_file)
+                file_name = os.path.basename(file)
+                self.file_indices.append((file_name, file_start_idx, file_end_idx))
+
+                file_start_idx = file_end_idx + 1
+
+            self.animations = np.concatenate(anims)
+
             np.savez_compressed(
                 cache_path,
                 animations=self.animations,
                 bone_offsets=self.hierarchy.bone_offsets,
                 bone_names=self.hierarchy.bone_names,
-                parent_ids=self.hierarchy.parent_ids
+                parent_ids=self.hierarchy.parent_ids,
+                file_indices=self.file_indices
             )
 
         # Resolve norm-params
@@ -184,7 +198,34 @@ class ETNDataset(IterableDataset):
 
         return np.asarray(contacts_l), np.asarray(contacts_r)
 
-
     def extract_labels(self):
         # TODO: something here.
         print("labels here")
+
+    def get_filename_by_index(self, idx) -> str:
+        """
+        Returns the filename of the sample at the given index. Returns NONE if no such index.
+        """
+
+        filename = "NONE"
+        for file in self.file_indices:
+            if int(file[1]) <= idx <= int(file[2]):
+                filename = file[0]
+
+        return filename
+
+    def get_index_of_filename(self, filename: str):
+        """
+        Returns the start and end sample indices of the given file
+
+        :return: A tuple of (start_index, end_index). If no file is found will return (-1, -1)
+        """
+        start_idx = -1
+        end_idx = -1
+
+        for file in self.file_indices:
+            if filename == file[0]:
+                start_idx = int(file[1])
+                end_idx = int(file[2])
+
+        return start_idx, end_idx

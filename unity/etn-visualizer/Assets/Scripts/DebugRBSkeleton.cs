@@ -17,6 +17,8 @@ public class DebugRBSkeleton : MonoBehaviour
     // private Dictionary<string, Dictionary<string, Transform>> skeletonList;
     private Dictionary<string, List<Transform>> rigList;
 
+    private char separator = ';'; // must match with python-side separator.
+
     private void Awake()
     {
         frameTime = 1f / framerate;
@@ -76,7 +78,7 @@ public class DebugRBSkeleton : MonoBehaviour
     void ProcessHierarchyDefinition(string[] unparsedData)
     {
         string rigName = unparsedData[1];
-        string[] jointList = unparsedData[2].Split('_');
+        string[] jointList = unparsedData[2].Split(separator);
         
         GameObject rigParent = GameObject.Find($@"model_{rigName}");
 
@@ -123,7 +125,7 @@ public class DebugRBSkeleton : MonoBehaviour
             return;
         }
 
-        string[] poseUnparsed = unparsedData[2].Split('_');
+        string[] poseUnparsed = unparsedData[2].Split(separator);
         float[] pose = Array.ConvertAll(poseUnparsed, float.Parse);
         //split pose into rootpos + quats. Quat indices in data are the same as indices in the parsed hierarchy. 
         Vector3 root_pos = new Vector3(pose[0], pose[1], pose[2]);
@@ -171,7 +173,7 @@ public class DebugRBSkeleton : MonoBehaviour
     void ProcessAddtionalData(string[] unparsedData)
     {
         //Temp, just print info into textbox
-        string parsedText = unparsedData[1].Replace('_', '\n');
+        string parsedText = unparsedData[1].Replace(separator, '\n');
         debugUI.SetText(parsedText);
     }
 }

@@ -122,29 +122,29 @@ public class PythonLauncher : MonoBehaviour
 
     void HandleInput()
     {
-        if (Input.GetKeyDown(KeyCode.RightArrow))
+        if (Input.GetKeyDown(KeyCode.Keypad6))
         {
-            WriteToProcess("NAV_NEXT");
+            WriteToProcess("NAV;NEXT");
         }
-        else if (Input.GetKeyDown(KeyCode.LeftArrow))
+        else if (Input.GetKeyDown(KeyCode.Keypad4))
         {
-            WriteToProcess("NAV_PREV");
+            WriteToProcess("NAV;PREV");
         }
-        else if (Input.GetKeyDown(KeyCode.DownArrow))
+        else if (Input.GetKeyDown(KeyCode.Keypad5))
         {
-            WriteToProcess("NAV_REPEAT");
+            WriteToProcess("NAV;REPEAT");
         }
         
-        if (Input.GetKeyDown(KeyCode.F))
+        if (Input.GetKeyDown(KeyCode.Keypad1))
         {
             Debug.Log("Request Mode switch: Frame");
-            WriteToProcess("MODE_FRAME");
+            WriteToProcess("MODE;FRAME");
         }
         
-        if (Input.GetKeyDown(KeyCode.S))
+        if (Input.GetKeyDown(KeyCode.Keypad2))
         {
             Debug.Log("Request Mode switch: Sequence");
-            WriteToProcess("MODE_SEQ");
+            WriteToProcess("MODE;SEQ");
         }
     }
 

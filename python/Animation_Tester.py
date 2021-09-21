@@ -37,7 +37,7 @@ class SampleExplorer:
         self.sample_idx = 0  # handles global sample index
         self.frame_idx = 0  # handles frame index in samples
         self.total_samples = len(self.data.animations)
-        self.separator = '_'
+        self.separator = ';'
         self.sample_length = 41  # The amount of frames in each sample. TODO: Base on database variable
 
     def play(self):
@@ -45,8 +45,8 @@ class SampleExplorer:
         self.print_hierarchy(self.data.hierarchy, self.rig_name)
 
         while self.running:
-            message = input("Cont?\n")
-            message = message.split("_")
+            in_message = input("Cont?\n")
+            message = in_message.split(self.separator)
 
             try:
                 key = message[0]
@@ -54,21 +54,23 @@ class SampleExplorer:
 
                 mode = self.mode
                 if key == "NAV":  # Navigate frames or sample indices
-                    if args[0] == "NEXT":
+                    if args[0] == "NEXT":  # Increment index by 1
                         if mode == PlaybackMode.FRAME:
                             self.frame_idx += 1
                         elif mode == PlaybackMode.SEQUENCE:
                             self.sample_idx += 1
-                    elif args[0] == "PREV":
+                    elif args[0] == "PREV":  # Decrement index by 1
                         if mode == PlaybackMode.FRAME:
                             self.frame_idx -= 1
                         elif mode == PlaybackMode.SEQUENCE:
                             self.sample_idx -= 1
-                    elif args[0] == "GOTO":
+                    elif args[0] == "GOTO":  # Go to given index
                         if mode == PlaybackMode.FRAME:
                             self.frame_idx = int(args[1])
                         elif mode == PlaybackMode.SEQUENCE:
                             self.sample_idx = int(args[1])
+                    elif args[0] == "FILE":  # Go to start of given file
+                        self.sample_idx = self.data.get_index_of_filename(args[1])[0]
 
                     # Wrap indices
                     self.wrap_idx()
@@ -88,8 +90,9 @@ class SampleExplorer:
                 else:
                     print("ERROR: could not parse message. Try again.\n")
 
-            except:
-                print("Exception Caught")
+            except Exception as e:
+                print(f"Caught error with input: {in_message}")
+                print(f"Error Message:", e)
 
     def wrap_idx(self):
 
@@ -105,9 +108,6 @@ class SampleExplorer:
             self.sample_idx = 0
         elif self.sample_idx < 0:
             self.sample_idx = self.total_samples - 1
-
-
-
 
     def print_sample(self, sample):
         """
@@ -153,7 +153,7 @@ class SampleExplorer:
     def print_hierarchy(self, hierarchy: HierarchyDefinition, hierarchy_name: str):
 
         outstring = f"H {hierarchy_name} "
-        outstring += '_'.join(hierarchy.bone_names)
+        outstring += self.separator.join(hierarchy.bone_names)
         print(outstring)
 
     def print_frame_debug(self, sample_idx, frame_idx, contacts):
@@ -162,6 +162,7 @@ class SampleExplorer:
         debug_string += f"Sample-index={sample_idx}" + self.separator
         debug_string += f"Frame-index={frame_idx}" + self.separator
         debug_string += f"Total-samples={self.total_samples}" + self.separator
+        debug_string += f"Filename={self.data.get_filename_by_index(self.sample_idx)}" + self.separator
         debug_string += "Contacts=[" + ','.join(['1' if x else '0' for x in contacts]) + "]"
 
         print(debug_string)
