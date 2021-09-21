@@ -10,6 +10,7 @@ from bvh_animation import BVHAnimation
 from utils_fk import np_forward_kinematics_batch
 from utils_norm import *
 
+
 class HierarchyDefinition:
     def __init__(self, bone_names, bone_offsets, parent_ids):
         """
@@ -113,9 +114,12 @@ class ETNDataset(IterableDataset):
         while True:
             n_animations = len(self.animations)
             for idx in random.sample(range(n_animations), n_animations):
-                root, quats, root_offsets, quat_offsets, target_frame, global_positions, contacts = self.animations[idx]
+                root, quats, root_offsets, quat_offsets, target_frame, global_positions, contacts, \
+                    labels = self.animations[idx]
 
                 ground_truth = np.concatenate([root, quats], axis=1)
+
+                # TODO: Add labels as output of iterator and include in generator code
                 yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts
 
     def to_etn_input(self, animation: BVHAnimation, subsample_factor: int):
@@ -164,6 +168,9 @@ class ETNDataset(IterableDataset):
             contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
             contacts = np.concatenate(contacts, axis=1)
 
+            # Autolabel frames.
+            labels = self.extract_labels(window_size)
+
             processed_data.append(np.array([
                 root_vel,
                 quats,
@@ -171,7 +178,8 @@ class ETNDataset(IterableDataset):
                 quat_offsets,
                 target_frame,
                 global_positions,
-                contacts
+                contacts,
+                labels
             ], dtype=object))
         return np.array(processed_data)
 
@@ -198,9 +206,10 @@ class ETNDataset(IterableDataset):
 
         return np.asarray(contacts_l), np.asarray(contacts_r)
 
-    def extract_labels(self):
-        # TODO: something here.
-        print("labels here")
+    def extract_labels(self, window_size):
+        # TODO: actual labeling.
+        labels = np.asarray([[1, 0, 1, 0]] * (window_size - 1))
+        return labels
 
     def get_filename_by_index(self, idx) -> str:
         """

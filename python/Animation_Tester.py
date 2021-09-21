@@ -121,17 +121,18 @@ class SampleExplorer:
         target_frame = sample[4]
         glob_positions = sample[5]
         contacts = sample[6]
+        labels = sample[7]
 
         root_pos = glob_positions[:, :3]
         if self.mode == PlaybackMode.SEQUENCE:
             for i in range(0, len(quats)):
                 self.print_frame(root_pos[i], quats[i], self.rig_name)
-                self.print_frame_debug(self.sample_idx, i, contacts[i])
+                self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i])
 
         elif self.mode == PlaybackMode.FRAME:
             idx = self.frame_idx
             self.print_frame(root_pos[idx], quats[idx], self.rig_name)
-            self.print_frame_debug(self.sample_idx, idx, contacts[idx])
+            self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx])
 
     def print_frame(self, root_pos, quats, rig_name: str):
         """
@@ -156,14 +157,14 @@ class SampleExplorer:
         outstring += self.separator.join(hierarchy.bone_names)
         print(outstring)
 
-    def print_frame_debug(self, sample_idx, frame_idx, contacts):
+    def print_frame_debug(self, sample_idx, frame_idx, contacts, labels):
 
         debug_string = "A "  # Marker is always first element
-        debug_string += f"Sample-index={sample_idx}" + self.separator
-        debug_string += f"Frame-index={frame_idx}" + self.separator
-        debug_string += f"Total-samples={self.total_samples}" + self.separator
+        debug_string += f"Sample-index={sample_idx}/{self.sample_length-1}" + self.separator
+        debug_string += f"Frame-index={frame_idx}/{self.total_samples-1}" + self.separator
         debug_string += f"Filename={self.data.get_filename_by_index(self.sample_idx)}" + self.separator
-        debug_string += "Contacts=[" + ','.join(['1' if x else '0' for x in contacts]) + "]"
+        debug_string += f"Contacts=[{','.join(['1' if x else '0' for x in contacts])}]" + self.separator
+        debug_string += f"Labels={labels}"
 
         print(debug_string)
 
