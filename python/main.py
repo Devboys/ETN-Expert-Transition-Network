@@ -30,15 +30,14 @@ def run(base_dir, is_param_optimizing: bool):
     model_name = f"etn_{model_id}_bs{str(batch_size)}_nb{str(n_batches)}_lr{str(learning_rate)}.pt"
     model_path = model_dir + model_name
 
-    train_data = ETNDataset(f"{basedir}/data/lafan1_reduced/train", joint_count=num_joints)
+    train_data = ETNDataset(f"{basedir}/data/lafan1_reduced/train")
     train_loader = DataLoader(train_data, batch_size=batch_size)
-    val_data = ETNDataset(f"{basedir}/data/lafan1_reduced/val", joint_count=num_joints, train_data=train_data)
+    val_data = ETNDataset(f"{basedir}/data/lafan1_reduced/val", train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=batch_size)
 
     generator = ETNGenerator(
-        learning_rate=learning_rate,
-        num_joints=num_joints,
-        use_gan=False
+        hierarchy=val_data.hierarchy,
+        learning_rate=learning_rate
     )
 
     if Path(model_path).exists():
@@ -48,10 +47,10 @@ def run(base_dir, is_param_optimizing: bool):
 
         # Get generated transition
         batch = next(iter(val_loader))
-        pred_positions, _, pred_quats = generator.eval_batch(batch)
+        pred_positions, pred_quats = generator.eval_batch(batch)
 
         # Parse 'original' data aka batch. Used for comparison
-        root, quats, root_offsets, quat_offsets, target_quats, joint_offsets, parents, ground_truth, global_positions, \
+        root, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
             contacts = [b.float().to(generator.device) for b in batch]
         org_quats = quats.detach().cpu().numpy()
         org_quats = org_quats[:, 10:]  # Trim past-context frames
@@ -65,13 +64,13 @@ def run(base_dir, is_param_optimizing: bool):
         pred_root_pos = pred_root_pos[:, :, :3]
 
         # Print hierarchy info
-        print_hierarchy(val_data.joint_names, parents, val_data.joint_offsets, "original")
-        print_hierarchy(val_data.joint_names, parents, val_data.joint_offsets, "prediction")
+        print_hierarchy(val_data.hierarchy, "original")
+        print_hierarchy(val_data.hierarchy, "prediction")
 
-        print_sequences(pred_quats, org_quats, org_root_pos, pred_root_pos, val_data.joint_names, "prediction", 30)
+        print_sequences(pred_quats, org_quats, org_root_pos, pred_root_pos, val_data.hierarchy.bone_names, "prediction", 30)
     else:
         generator.do_train(train_loader, model_id, tensorboard_dir, n_batches, val_loader)
         generator.save(model_path)
 
 
-run(sys.path[0], True)  # Encapsulate run behaviour to prevent globals
+run(sys.path[0], False)  # Encapsulate run behaviour to prevent globals

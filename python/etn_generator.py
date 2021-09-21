@@ -1,3 +1,4 @@
+import numpy as np
 from torch import nn
 from torch.utils.data import DataLoader
 import torch as t
@@ -6,6 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils_fk import torch_forward_kinematics_batch
 from utils_tensorboard import *
+from etn_dataset import HierarchyDefinition
 
 
 class Encoder(nn.Module):
@@ -73,15 +75,15 @@ class Decoder(nn.Module):
 
 
 class ETNGenerator(nn.Module):
-    def __init__(self, learning_rate=1e-3, num_joints=22, use_gan=False):
+    def __init__(self, hierarchy: HierarchyDefinition, learning_rate=1e-3):
         """
 
+        :param hierarchy: The HierarchyDefinition of the data to work with.
         :param learning_rate:
-        :param num_joints:
-        :param use_gan:
         """
         super().__init__()
-        self.num_joints = num_joints
+
+        self.num_joints = hierarchy.bone_count()
         self.c_size = 4  # Contact information size (2 bools pr foot)
         self.q_size = self.num_joints * 4  # Size of quaternion pose vector
         self.r_size = 3  # Size of root-velocity vector
@@ -110,8 +112,10 @@ class ETNGenerator(nn.Module):
         self.train_writer = None
         self.val_writer = None
 
-        #global info
         self.lr = learning_rate
+
+        self.bone_offsets = t.from_numpy(np.tile(hierarchy.bone_offsets, (32, 1, 1))).float().to(self.device)  # Store separately as tensor
+        self.parent_ids = t.from_numpy(hierarchy.parent_ids).float().to(self.device)  # Store separately as tensor
 
     def __step(self,
                root_vel: t.Tensor,
@@ -285,14 +289,14 @@ class ETNGenerator(nn.Module):
 
         :param batch: A concatenated input batch from an ETNDataset.
         :return: The predicted transition frames (excluding past context) for the given batch as well as used
-            parent-hierarchy TODO(2):We dont have to return the parent hierarchy here, get it from an ETNDataset instead
-            [Global joint quats, parent_hierarchy, local joint quats]
+            parent-hierarchy
+            (Global joint positions, local joint quats)
         """
         self.eval()  # Flag network for eval mode
-        root, quats, root_offsets, quat_offsets, target_quats, joint_offsets, parents, ground_truth, global_positions, \
+        root, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
             contacts = [b.float().to(self.device) for b in batch]
         with t.no_grad():
-            poses, out_contacts = self.__forward(
+            pred_quats, out_contacts = self.__forward(
                 root_in=root[:, :10],
                 quats_in=quats[:, :10],
                 root_offset_in=root_offsets[:, :10],
@@ -302,37 +306,37 @@ class ETNGenerator(nn.Module):
                 target_root_pos=-root_offsets[:, 0]
             )
 
-            glob_poses = self.__fk(joint_offsets, poses, parents)
+            pred_positions = self.__fk(pred_quats)
 
             loss = self.__loss(
-                frames=poses,
+                frames=pred_quats,
                 gt_frames=ground_truth[:, 10:-1], # skip last (target) frame
                 contacts=out_contacts,
                 gt_contacts=contacts[:, 10:-1], # skip last (target) frame
-                positions=glob_poses,
+                positions=pred_positions,
                 gt_positions=global_positions[:, 10:-1] # skip last (target) frame
             )
         self.__report_loss(self.val_writer, loss)
 
-        return glob_poses, parents, poses  # poses is concat vector, only extract rots.
+        return pred_positions, pred_quats  # poses is concat vector, only extract rots TODO: still relevant?
 
-    def __fk(self, offsets, frames, parents):
+    def __fk(self, frames):
         """
-        Performs FK calculations on the given pose for the given hierarchy
+        Performs FK calculations on the given pose using the stored generators hierarchy.
 
-        :param offsets: Hierarchy bone offsets
         :param frames: Joint quats for pose
-        :param parents: Hierarchy parent-child mapping
         :return: Calculated global joint positions
         """
         batch_size, frame_count, channels = frames.shape
         # Merge dimensions 0 & 1 to make one batch
         frames = frames.view(-1, channels)
         # Do FK
+        offset_thing = self.bone_offsets
+
         frames = torch_forward_kinematics_batch(
-            offsets=t.cat(frame_count*[offsets]),
+            offsets=t.cat(frame_count*[offset_thing]),
             pose=frames,
-            parents=parents[0],
+            parents=self.parent_ids,  # TODO: removed [0] verify that its ok
             joint_count=self.num_joints
         )
 
@@ -350,18 +354,18 @@ class ETNGenerator(nn.Module):
             writer.add_scalar("loss/loss", loss.item(), self.batch_idx)
 
     def do_train(self,
-                 train_data: DataLoader,
+                 train_loader: DataLoader,
                  model_id: str,
                  log_dir: str,
                  n_train_batches: int,
-                 val_data: DataLoader,
-                 val_frequency=10
+                 val_loader: DataLoader,
+                 val_frequency=10,
                  ):
 
         # Set train and val writer
         self.train_writer, self.val_writer = get_writers(log_dir, f"etn_{model_id}_lr{self.lr}")
 
-        data_iter = iter(train_data)
+        data_iter = iter(train_loader)
         pbar = tqdm.tqdm(range(n_train_batches))
 
         for _ in pbar:
@@ -369,7 +373,7 @@ class ETNGenerator(nn.Module):
             self.train()
 
             # Extract batch info
-            root, quats, root_offsets, quat_offsets, target_quats, joint_offsets, parents, ground_truth, \
+            root, quats, root_offsets, quat_offsets, target_quats, ground_truth, \
                 global_positions, contacts = [b.float().to(self.device) for b in next(data_iter)]
 
             # Generate sequence
@@ -382,7 +386,7 @@ class ETNGenerator(nn.Module):
                 contacts_in=contacts[:, :10],
                 target_root_pos=-root_offsets[:, 0]
             )
-            glob_poses = self.__fk(joint_offsets, poses, parents,)
+            glob_poses = self.__fk(poses)
 
             # Calculate loss
             loss = self.__loss(poses, ground_truth[:, 10:-1], c, contacts[:, 10:-1], glob_poses, global_positions[:, 10:-1]) # skipping last (target) frames
@@ -399,7 +403,7 @@ class ETNGenerator(nn.Module):
 
             # Run validation at freq
             if self.batch_idx % val_frequency == 0:
-                batch = next(iter(val_data))
+                batch = next(iter(val_loader))
                 self.eval_batch(batch)
             self.batch_idx += 1
 

@@ -1,20 +1,25 @@
 import numpy as np
 import time
+from etn_dataset import HierarchyDefinition
 
+__all__ = ['print_hierarchy', 'print_sequences', 'print_single_sequence', 'print_frame']
 
-def print_hierarchy(joint_names, parent_ids, joint_offsets, rig_name: str):
+def print_hierarchy(hierarchy: HierarchyDefinition, rig_name: str):
     """
     Prints formatted hierarchy info
-    :param joint_names:
-    :param parent_ids:
-    :param joint_offsets:
-    :param rig_name:
-    :return:
+
+    :param hierarchy: The hierarchy to print.
+    :param rig_name: The chosen name of the hierarchy. Can be used to distinguish between multiple anim sequences.
     """
+
+    joint_names = hierarchy.bone_names
+    joint_offsets = hierarchy.bone_offsets
+    parent_ids = hierarchy.parent_ids
+
     hierarchy_info = f"H {rig_name} {joint_names[0]}- "
 
     for j in range(1, len(joint_names)):  # we skip first parent id (root) because parent_ids[0] = -1
-        parent_index = parent_ids[0][j]
+        parent_index = parent_ids[j]
         hierarchy_info += f"{joint_names[j]}-{joint_names[int(parent_index)]} "
 
     print(hierarchy_info)

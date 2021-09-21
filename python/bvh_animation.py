@@ -153,7 +153,7 @@ class BVHAnimation:
                 euler = frame[e_index:e_index+3]
                 quat = transform.quaternion_from_euler(euler[0], euler[1], euler[2], "rzyx")
                 anim_vec[frame_index, q_index:q_index+4] = quat
-        return anim_vec, self.joints_offsets, self.joints_parent_ids
+        return anim_vec
 
     def joint_name_subset(self, subset_indices):
         joint_list = np.empty(len(subset_indices), dtype='U20')  # U20 -> unicode str of len 20

@@ -5,6 +5,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Linq;
+using IngameDebugConsole;
 using Debug = UnityEngine.Debug;
 
 public class PythonLauncher : MonoBehaviour
@@ -23,7 +24,7 @@ public class PythonLauncher : MonoBehaviour
 
     private Process python;
     
-    private char[] _dataKeywords = { 'H', 'O', 'J', 'G', 'X', 'T', 'B', 'E' };
+    private char[] _dataKeywords = { 'H', 'O', 'J', 'G', 'X', 'T', 'B', 'E', 'P', 'A'};
     public static List<string> data = new List<string>();
     [SerializeField]
     private int _dataCount;
@@ -56,18 +57,23 @@ public class PythonLauncher : MonoBehaviour
 
         python.BeginErrorReadLine();
         python.BeginOutputReadLine();
+        
+        RegisterCustomCommands();
     }
 
     private void PrintDebugInformation(string msg)
     {
         Debug.Log("Python process: " + msg);
     }
-    
+
+    private void RegisterCustomCommands()
+    {
+        DebugLogConsole.AddCommandInstance("p", "Prints something to the python process", "WriteToProcess", this);
+    }
 
     private void OutputDataReceived(object sender, DataReceivedEventArgs e)
     {
         
-        PrintDebugInformation(e.Data);
         if (!paused && e.Data.Length > 0 && _dataKeywords.Contains(e.Data.ElementAt(0)))
         {
             data.Add(e.Data);
@@ -118,19 +124,31 @@ public class PythonLauncher : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.RightArrow))
         {
-            WriteToProcess("Next");
+            WriteToProcess("NAV_NEXT");
         }
         else if (Input.GetKeyDown(KeyCode.LeftArrow))
         {
-            WriteToProcess("Prev");
+            WriteToProcess("NAV_PREV");
         }
         else if (Input.GetKeyDown(KeyCode.DownArrow))
         {
-            WriteToProcess("Repeat");
+            WriteToProcess("NAV_REPEAT");
+        }
+        
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            Debug.Log("Request Mode switch: Frame");
+            WriteToProcess("MODE_FRAME");
+        }
+        
+        if (Input.GetKeyDown(KeyCode.S))
+        {
+            Debug.Log("Request Mode switch: Sequence");
+            WriteToProcess("MODE_SEQ");
         }
     }
 
-    void WriteToProcess(string str)
+    public void WriteToProcess(string str)
     {
         StreamWriter writer = python.StandardInput;
         writer.WriteLine(str);

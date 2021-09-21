@@ -10,13 +10,29 @@ from bvh_animation import BVHAnimation
 from utils_fk import np_forward_kinematics_batch
 from utils_norm import *
 
+class HierarchyDefinition:
+    def __init__(self, bone_names, bone_offsets, parent_ids):
+        """
+        A simple data object to contain hierarchy-level information with some simple helper classes.
+
+        :param bone_names: tuple of bone names.
+        :param bone_offsets: tuple of bone offsets.
+        :param parent_ids: tuple of parent indices for bones.
+        """
+
+        self.bone_names = bone_names
+        self.bone_offsets = bone_offsets
+        self.parent_ids = parent_ids
+
+    def bone_count(self):
+        return len(self.bone_names)
+
 
 class ETNDataset(IterableDataset):
     def __init__(self,
                  data_dir: str,
                  train_data: 'ETNDataset' = None,
-                 subsample_factor: int = 4,
-                 joint_count=22
+                 subsample_factor: int = 4
                  ):
         """
         An iterable, normalized dataset of animations of uniform length, read from BVH files. Data is formatted for
@@ -27,12 +43,10 @@ class ETNDataset(IterableDataset):
          calculated from this dataset. Use this when you want to synchronize normalization over multiple datasets.
          :param subsample_factor: The granularity factor, i.e. how much to subsample the dataset when generating
          samples.
-         :param joint_count: The amount of joints in this dataset. TODO (2): check if this can be calculated from data
         """
 
         assert not data_dir.endswith("/"), "data_dir should not end with a '/'"
 
-        self.joint_count = joint_count
         # Toebase and ankle joint indices for feet, should be adjusted to the used data set. For contact-calculations.
         self.lfoot_idx = [3, 4]
         self.rfoot_idx = [7, 8]
@@ -43,17 +57,18 @@ class ETNDataset(IterableDataset):
         if os.path.exists(cache_path):
             # Load data from cache
             with np.load(cache_path, allow_pickle=True) as data:
-                self.joint_names = data["joint_names"]
-                self.joint_offsets = data["joint_offsets"]
                 self.animations = data["animations"]
+                self.hierarchy = HierarchyDefinition(data["bone_names"], data["bone_offsets"], data["parent_ids"])
         else:
             # Load data from files and cache
             bvh_paths = glob.glob(data_dir + "/*.bvh")
             assert len(bvh_paths) > 0, f"No .bvh files found in {data_dir}"
-            # Get a bvh animation and extract hiearchy info from it. All files are assumed to use the same hierarchy.
+            # Get a bvh animation and extract hierarchy info from it. All files are assumed to use the same hierarchy.
             sample_anim = BVHAnimation(bvh_paths[0])
-            self.joint_names = sample_anim.joints_names
-            self.joint_offsets = sample_anim.joints_offsets
+            self.hierarchy = HierarchyDefinition(bone_names=sample_anim.joints_names,
+                                                 bone_offsets=sample_anim.joints_offsets,
+                                                 parent_ids=sample_anim.joints_parent_ids
+                                                 )
             # Load and format all bvh animations into input-vectors.
             self.animations = np.concatenate([
                 self.to_etn_input(BVHAnimation(file), subsample_factor) for file in
@@ -62,8 +77,9 @@ class ETNDataset(IterableDataset):
             np.savez_compressed(
                 cache_path,
                 animations=self.animations,
-                joint_names=self.joint_names,
-                joint_offsets=self.joint_offsets
+                bone_offsets=self.hierarchy.bone_offsets,
+                bone_names=self.hierarchy.bone_names,
+                parent_ids=self.hierarchy.parent_ids
             )
 
         # Resolve norm-params
@@ -83,12 +99,10 @@ class ETNDataset(IterableDataset):
         while True:
             n_animations = len(self.animations)
             for idx in random.sample(range(n_animations), n_animations):
-                root, quats, root_offsets, quat_offsets, target_frame, joint_offsets, parents, global_positions, \
-                    contacts = self.animations[idx]
+                root, quats, root_offsets, quat_offsets, target_frame, global_positions, contacts = self.animations[idx]
 
                 ground_truth = np.concatenate([root, quats], axis=1)
-                yield root, quats, root_offsets, quat_offsets, target_frame, joint_offsets, parents.astype(int), \
-                    ground_truth, global_positions, contacts
+                yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts
 
     def to_etn_input(self, animation: BVHAnimation, subsample_factor: int):
         """
@@ -107,7 +121,7 @@ class ETNDataset(IterableDataset):
 
         processed_data = list()
 
-        animation, joint_offsets, parents = animation.as_local_quaternions(subsample_factor)
+        animation = animation.as_local_quaternions(subsample_factor)
         for window_index in range(1, len(animation), window_step):
             frames = animation[window_index: window_index + window_size]
             if len(frames) != window_size:
@@ -128,11 +142,11 @@ class ETNDataset(IterableDataset):
 
             # Global joint positions (through FK)
             global_positions = np_forward_kinematics_batch(
-                np.repeat(joint_offsets.reshape([1, self.joint_count, 3]), window_size - 1, 0),
-                np.concatenate([root_vel, quats], axis=1), parents, joint_count=self.joint_count)
+                np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0),
+                np.concatenate([root_vel, quats], axis=1), self.hierarchy.parent_ids, joint_count=self.hierarchy.bone_count())
 
             # Contacts
-            pos = global_positions.reshape((41, 22, 3))  # TODO (2): base on global var instead of static "22"
+            pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))
             contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
             contacts = np.concatenate(contacts, axis=1)
 
@@ -142,14 +156,12 @@ class ETNDataset(IterableDataset):
                 root_offsets,
                 quat_offsets,
                 target_frame,
-                joint_offsets,
-                parents,
                 global_positions,
                 contacts
             ], dtype=object))
         return np.array(processed_data)
 
-    def extract_feet_contacts(self, pos, lfoot_idx, rfoot_idx, vel_threshold = 0.02):
+    def extract_feet_contacts(self, pos, lfoot_idx, rfoot_idx, vel_threshold=0.02):
         """
         Extracts binary tensors of feet contacts
 
@@ -171,3 +183,8 @@ class ETNDataset(IterableDataset):
         contacts_r = np.concatenate([contacts_r, contacts_r[-1:]], axis=0)
 
         return np.asarray(contacts_l), np.asarray(contacts_r)
+
+
+    def extract_labels(self):
+        # TODO: something here.
+        print("labels here")

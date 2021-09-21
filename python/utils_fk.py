@@ -62,7 +62,7 @@ def np_forward_kinematics_batch(offsets, pose, parents, joint_count=22):
     return np.concatenate(global_positions, axis=1)
 
 
-def torch_forward_kinematics_batch(offsets, pose, parents, joint_count=22):
+def torch_forward_kinematics_batch(offsets, pose, parents, joint_count):
     """
     Computes the final positions and rotations in global space of joints in a skeleton hierarchy.
     :param offsets: Batch of shape (batch_size, num_joints*3) of local offsets of each joint o

@@ -12,13 +12,17 @@ public class DebugRBSkeleton : MonoBehaviour
     private float timer;
     private float frameTime;
 
-    private Dictionary<string, Dictionary<string, Transform>> skeletonList;
+    public TMPro.TextMeshProUGUI debugUI;
+
+    // private Dictionary<string, Dictionary<string, Transform>> skeletonList;
+    private Dictionary<string, List<Transform>> rigList;
 
     private void Awake()
     {
         frameTime = 1f / framerate;
         timer = 0;
-        skeletonList = new Dictionary<string, Dictionary<string, Transform>>();
+        // skeletonList = new Dictionary<string, Dictionary<string, Transform>>();
+        rigList = new Dictionary<string, List<Transform>>();
     }
 
     void Update()
@@ -45,94 +49,129 @@ public class DebugRBSkeleton : MonoBehaviour
         }
     }
 
-    void HandlePythonData(string data)
+    void HandlePythonData(string message)
     {
-        string[] info = data.Split(' '); //Split at whitespace
+        string[] messageSplit = message.Split(' ');
+        string marker = messageSplit[0]; // Marker should always be first part
 
-        switch (info[0]) //First element describes data-type
+        switch (marker)
         {
-            case "H":
-                ProcessHierarchyDefinition(info);
+            case "H": // Hierarchy definition
+                ProcessHierarchyDefinition(messageSplit);
                 break;
-            case "G":
-                ProcessGlobalJointData(info);
-                break;
-            case "E":
+            case "P": // Animation pose
+                ProcessPoseData(messageSplit);
                 timer = frameTime;
                 break;
+            case "A": // Additional anim data (per frame)
+                ProcessAddtionalData(messageSplit);
+                break;
+            default:
+                Debug.LogError($"MESSAGE PARSE ERROR: Unhandled marker: '{marker}'");
+                break;
+
+
         }
     }
-
     void ProcessHierarchyDefinition(string[] unparsedData)
     {
-        string hierarchyName = unparsedData[1]; //first index is hierarchy name
-        // float hipSpineOffset = ParseFloat(unparsedData[2]);
+        string rigName = unparsedData[1];
+        string[] jointList = unparsedData[2].Split('_');
+        
+        GameObject rigParent = GameObject.Find($@"model_{rigName}");
 
-        var skeletonDefinition = new Dictionary<string, Transform>();
-        GameObject hierarchyParent = GameObject.Find($@"model_{hierarchyName}");
-
-        //Rest of the data are parent-child pairs by names, so here we simply pair them with Transforms on the skeleton
-        for (uint pairIndex = 2; pairIndex < unparsedData.Length; pairIndex++)
+        List<Transform> rigJointList = new List<Transform>();
+        
+        if (rigParent == null)
         {
-            //Pair format: "<child_name>-<parent_name>"
-            string[] childParentPair = unparsedData[pairIndex].Split('-');
-            string childName = childParentPair[0];
-
-            if (!skeletonDefinition.ContainsKey(childName))
+            Debug.LogError($"HIERARCHY PARSE ERROR: Couldn't find model for rig-name '{rigName}' ");
+            return;
+        }
+        
+        foreach (string jointName in jointList)
+        {
+            var childList = rigParent.GetComponentsInChildren<Transform>();
+            Transform jointTransform = null;
+            
+            foreach (Transform childTransform in childList)
             {
-                var childList = hierarchyParent.GetComponentsInChildren<Transform>();
-                Transform childTransform = null;
-                foreach (Transform child in childList)
+                if (childTransform.gameObject.name == $@"Model:{jointName}")
                 {
-                    if (child.gameObject.name == $@"Model:{childName}") childTransform = child;
+                    jointTransform = childTransform;
+                    break;
                 }
+            }
 
-                if (childTransform != null)
-                {
-                    skeletonDefinition.Add(childName, childTransform);
-                }
+            if (jointTransform != null)
+            {
+                rigJointList.Add(jointTransform);
             }
         }
         
-        skeletonList.Add(hierarchyName, skeletonDefinition);
-    }
-
-    void ProcessGlobalJointData(string[] info)
-    {
-        string skeletonName = info[1];
-        string jointName = info[2];
-
-        Vector3 jointPos = new Vector3(
-            -ParseFloat(info[3]), 
-            ParseFloat(info[4]),
-            ParseFloat(info[5])
-            );
-
-        Quaternion jointQuat = new Quaternion(
-            ParseFloat(info[6]), 
-            -ParseFloat(info[7]), 
-            -ParseFloat(info[8]),
-            ParseFloat(info[9])
-            );
-
-        // if (skeletonName == "original")
-        // {
-        //     jointPos += Vector3.left * _skeletonSpacing;
-        // }
+        rigList.Add(rigName, rigJointList);
+        Debug.Log("Registered hierarchy: " + rigName);
         
-        UpdateJoint(skeletonName, jointName, jointPos, jointQuat);
+    }
+    
+    void ProcessPoseData(string[] unparsedData)
+    {
+        string rigName = unparsedData[1];
+        List<Transform> rig;
+        if (!rigList.TryGetValue(rigName, out rig))
+        {
+            Debug.LogError($"POSE PROCESS ERROR: Couldn't find rig with name: '{rigName}'");
+            return;
+        }
+
+        string[] poseUnparsed = unparsedData[2].Split('_');
+        float[] pose = Array.ConvertAll(poseUnparsed, float.Parse);
+        //split pose into rootpos + quats. Quat indices in data are the same as indices in the parsed hierarchy. 
+        Vector3 root_pos = new Vector3(pose[0], pose[1], pose[2]);
+        
+        ArraySegment<float> poseQuats = new ArraySegment<float>(pose, 3, pose.Length - 3);
+        
+        //Set root node position.
+        rig[0].SetPositionAndRotation(root_pos, Quaternion.identity);
+        
+        //set joint rotations
+        for (int i = 0; i < rig.Count; i++)
+        {
+            //Parse quat
+            Quaternion jointRot = new Quaternion(
+                poseQuats.Array[i * 4],
+                poseQuats.Array[i * 4 + 1],
+                poseQuats.Array[i * 4 + 2],
+                poseQuats.Array[i * 4 + 3]
+            );
+            
+            //Lafan Data is in another coordinate system so we have to convert stuff first.
+            jointRot = Convert_quat_xzy_to_xyz(jointRot);
+            
+            rig[i].localRotation = jointRot;
+        }
+        
+        
     }
 
-    void UpdateJoint(string skeletonName, string jointName, Vector3 position, Quaternion quat)
+    Quaternion Convert_quat_xzy_to_xyz(Quaternion quatIn)
     {
-        if(jointName == "Hips")
-            skeletonList[skeletonName][jointName].localPosition += position;   
-
-        skeletonList[skeletonName][jointName].localRotation = quat;
+        Quaternion quatOut = new Quaternion(
+            quatIn.x, //TODO: QUAT CONVERSION
+            quatIn.y,
+            quatIn.z,
+            quatIn.w
+        );
+        
+        // quatIn.ToAngleAxis(out float angle, out Vector3 axis);
+        // Vector3 newAxis = new Vector3(axis.x, -axis.y, -axis.z);
+        // Quaternion quatOut = Quaternion.AngleAxis(angle, newAxis);
+        return quatOut;
     }
 
-    float ParseFloat(string s)
+    void ProcessAddtionalData(string[] unparsedData)
     {
-        return float.Parse(s, CultureInfo.InvariantCulture.NumberFormat);
+        //Temp, just print info into textbox
+        string parsedText = unparsedData[1].Replace('_', '\n');
+        debugUI.SetText(parsedText);
     }
 }
