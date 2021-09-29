@@ -169,7 +169,7 @@ class ETNDataset(IterableDataset):
             contacts = np.concatenate(contacts, axis=1)
 
             # Autolabel frames.
-            labels = self.extract_labels(window_size)
+            labels = self.extract_labels(root_vel, global_positions[:, :3])
 
             processed_data.append(np.array([
                 root_vel,
@@ -206,10 +206,18 @@ class ETNDataset(IterableDataset):
 
         return np.asarray(contacts_l), np.asarray(contacts_r)
 
-    def extract_labels(self, window_size):
+    def extract_labels(self, root_vel, root_pos):
         # TODO: actual labeling.
-        labels = np.asarray([[1, 0, 1, 0]] * (window_size - 1))
-        return labels
+        # If root joint velocity is less than threshold, then label = idle, else label = moving
+        # vel_thresh = 0.02  # EXAMPLE
+        # height_thresh = 2  # EXAMPLE
+        # moving_labels = [1 if vel > vel_thresh else 0 for vel in root_vel]  # EXAMPLE
+        #
+        # # If root joint position (height) lower than threshold, then label = crouching
+        # standing_labels = [1 if pos > height_thresh else 0 for pos in root_pos]  # EXAMPLE
+        # labels = np.concatenate(moving_labels, standing_labels, axis=1)
+
+        return [1, 0, 1, 0]
 
     def get_filename_by_index(self, idx) -> str:
         """
@@ -227,7 +235,7 @@ class ETNDataset(IterableDataset):
         """
         Returns the start and end sample indices of the given file
 
-        :return: A tuple of (start_index, end_index). If no file is found will return (-1, -1)
+        :return: A tuple of (start_index, end_index). If filename is not found, will return (-1, -1)
         """
         start_idx = -1
         end_idx = -1

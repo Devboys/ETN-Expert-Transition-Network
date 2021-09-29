@@ -310,15 +310,15 @@ class ETNGenerator(nn.Module):
 
             loss = self.__loss(
                 frames=pred_quats,
-                gt_frames=ground_truth[:, 10:-1], # skip last (target) frame
+                gt_frames=ground_truth[:, 10:-1],  # skip last (target) frame
                 contacts=out_contacts,
-                gt_contacts=contacts[:, 10:-1], # skip last (target) frame
+                gt_contacts=contacts[:, 10:-1],  # skip last (target) frame
                 positions=pred_positions,
-                gt_positions=global_positions[:, 10:-1] # skip last (target) frame
+                gt_positions=global_positions[:, 10:-1]  # skip last (target) frame
             )
         self.__report_loss(self.val_writer, loss)
 
-        return pred_positions, pred_quats  # poses is concat vector, only extract rots TODO: still relevant?
+        return pred_positions, pred_quats, out_contacts
 
     def __fk(self, frames):
         """

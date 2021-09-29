@@ -146,7 +146,7 @@ class BVHAnimation:
 
         for frame_index in range(0, new_frame_count):
             frame = self.frames[frame_index*subsamplestep]
-            anim_vec[frame_index, :3] = frame[:3]
+            anim_vec[frame_index, :3] = frame[:3]  # First three elements in pose is root joint position.
             for joint_index in range(self.n_joints):
                 e_index = joint_index * 3 + 3  # BVH stores rotations as euler angles
                 q_index = joint_index * 4 + 3  # We want to store as quaternions
@@ -155,8 +155,21 @@ class BVHAnimation:
                 anim_vec[frame_index, q_index:q_index+4] = quat
         return anim_vec
 
+    def as_local_euler(self, subsamplestep=1):
+        new_frame_count = self.n_frames // subsamplestep
+        anim_vec = np.zeros((new_frame_count, self.n_joints * 3 + 3))
+
+        for frame_index in range(0, new_frame_count):
+            frame = self.frames[frame_index * subsamplestep]
+            anim_vec[frame_index, :3] = frame[:3]  # First three elements in pose is root joint position.
+            for joint_index in range(self.n_joints):
+                e_index = joint_index * 3 + 3  # BVH stores rotations as euler angles
+                euler = frame[e_index:e_index + 3]
+                anim_vec[frame_index, e_index:e_index + 3] = euler
+        return anim_vec
+
     def joint_name_subset(self, subset_indices):
-        joint_list = np.empty(len(subset_indices), dtype='U20')  # U20 -> unicode str of len 20
+        joint_list = np.empty(len(subset_indices), dtype='U20')  # U20 -> unicode str of 20 characters
         for j in range(0, len(subset_indices)):
             joint_list[j] = str(self.joints_names[subset_indices[j]])
 
@@ -172,8 +185,9 @@ class BVHAnimation:
     def convert_parent_ids(self, parent_indices, subset_indices: list):
         converted_ids = np.empty(len(parent_indices), dtype=int)
         for p in range(0, len(converted_ids)):
-            if(parent_indices[p] == -1): continue
-            if(parent_indices[p] in subset_indices):
+            if parent_indices[p] == -1:
+                continue
+            if parent_indices[p] in subset_indices:
                 converted_ids[p] = subset_indices.index(parent_indices[p])
             else:
                 valid_parent_id = self.get_valid_parent_id(parent_indices[p], subset_indices)
@@ -182,8 +196,10 @@ class BVHAnimation:
         return converted_ids
 
     def get_valid_parent_id(self, current_index, subset_indices):
-        if(current_index == -1): return current_index
-        elif(current_index in subset_indices): return current_index
+        if current_index == -1:
+            return current_index
+        elif current_index in subset_indices:
+            return current_index
         else:
             return self.get_valid_parent_id(self.joints_parent_ids[current_index], subset_indices)
 

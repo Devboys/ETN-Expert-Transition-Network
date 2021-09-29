@@ -1,16 +1,8 @@
 import pathlib
-import numpy as np
 
 from etn_dataset import ETNDataset
 from etn_dataset import HierarchyDefinition
-from enum import Enum
-
-# Take animation, play it in unity in a simple manner.
-# Should be able to go back and forth
-# Info to show:
-# - Animation data (joint positions & rotation)
-# - Current anim and/or frame index in dataset
-# - Additional info packages (action label matrix, etc)
+from utils_print import *
 
 
 def run():
@@ -20,11 +12,6 @@ def run():
     data = ETNDataset(data_path)
     player = SampleExplorer(sample_size=32, anim_dataset=data)
     player.play()
-
-
-class PlaybackMode(Enum):
-    SEQUENCE = 1
-    FRAME = 2
 
 
 class SampleExplorer:
@@ -42,7 +29,7 @@ class SampleExplorer:
 
     def play(self):
 
-        self.print_hierarchy(self.data.hierarchy, self.rig_name)
+        print_hierarchy(self.data.hierarchy, self.rig_name, self.separator)
 
         while self.running:
             in_message = input("Cont?\n")
@@ -75,8 +62,8 @@ class SampleExplorer:
                     # Wrap indices
                     self.wrap_idx()
 
-                    sequence = self.data.animations[self.sample_idx]
-                    self.print_sample(sequence)
+                    sample = self.data.animations[self.sample_idx]
+                    self.print_sample(sample)
 
                 elif key == "STOP":  # Stop playback and close program
                     self.running = False
@@ -126,42 +113,19 @@ class SampleExplorer:
         root_pos = glob_positions[:, :3]
         if self.mode == PlaybackMode.SEQUENCE:
             for i in range(0, len(quats)):
-                self.print_frame(root_pos[i], quats[i], self.rig_name)
-                self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i])
+                print_frame(root_pos[i], quats[i], self.rig_name, self.separator)
+                self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i], self.rig_name)
 
         elif self.mode == PlaybackMode.FRAME:
             idx = self.frame_idx
-            self.print_frame(root_pos[idx], quats[idx], self.rig_name)
-            self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx])
+            print_frame(root_pos[idx], quats[idx], self.rig_name, self.separator)
+            self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx], self.rig_name)
 
-    def print_frame(self, root_pos, quats, rig_name: str):
-        """
-        Prints a single frame of animation in the format "P <rig_name> <root_pos>-<quats>".
-        Each element of root_pos and every joint rotation in <quats> is separated with a '-'.
+    def print_frame_debug(self, sample_idx, frame_idx, contacts, labels, rig_name: str):
 
-        :param root_pos: The global root position of the pose
-        :param quats: The quaternion rotations of each joint in the pose
-        :param rig_name: The name of the rig. (Can be used to run multiple animations at the same time)
-        """
-
-        frame_string = f"P {rig_name} "  # frame marker + rig identifier
-        frame_string = frame_string + self.separator.join([str(p) for p in root_pos])  # root position
-        frame_string += self.separator  # separator
-        frame_string += self.separator.join([str(q) for q in quats])  # quats
-
-        print(frame_string)
-
-    def print_hierarchy(self, hierarchy: HierarchyDefinition, hierarchy_name: str):
-
-        outstring = f"H {hierarchy_name} "
-        outstring += self.separator.join(hierarchy.bone_names)
-        print(outstring)
-
-    def print_frame_debug(self, sample_idx, frame_idx, contacts, labels):
-
-        debug_string = "A "  # Marker is always first element
-        debug_string += f"Sample-index={sample_idx}/{self.sample_length-1}" + self.separator
-        debug_string += f"Frame-index={frame_idx}/{self.total_samples-1}" + self.separator
+        debug_string = f"A {rig_name} "  # Marker must always be first element
+        debug_string += f"Sample-index={sample_idx}/{self.total_samples-1}" + self.separator
+        debug_string += f"Frame-index={frame_idx}/{self.sample_length-1}" + self.separator
         debug_string += f"Filename={self.data.get_filename_by_index(self.sample_idx)}" + self.separator
         debug_string += f"Contacts=[{','.join(['1' if x else '0' for x in contacts])}]" + self.separator
         debug_string += f"Labels={labels}"
@@ -170,4 +134,3 @@ class SampleExplorer:
 
 
 run()  # Encapsulate run behaviour to prevent globals
-

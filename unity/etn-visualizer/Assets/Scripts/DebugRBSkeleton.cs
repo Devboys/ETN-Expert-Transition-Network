@@ -13,6 +13,7 @@ public class DebugRBSkeleton : MonoBehaviour
     private float frameTime;
 
     public TMPro.TextMeshProUGUI debugUI;
+    public TMPro.TextMeshProUGUI debugUITwo;
 
     // private Dictionary<string, Dictionary<string, Transform>> skeletonList;
     private Dictionary<string, List<Transform>> rigList;
@@ -129,6 +130,11 @@ public class DebugRBSkeleton : MonoBehaviour
         float[] pose = Array.ConvertAll(poseUnparsed, float.Parse);
         //split pose into rootpos + quats. Quat indices in data are the same as indices in the parsed hierarchy. 
         Vector3 root_pos = new Vector3(pose[0], pose[1], pose[2]);
+
+        if(rigName == "prediction")
+        {
+            root_pos += Vector3.left * 100;
+        }
         
         ArraySegment<float> poseQuats = new ArraySegment<float>(pose, 3, pose.Length - 3);
         
@@ -157,11 +163,21 @@ public class DebugRBSkeleton : MonoBehaviour
 
     Quaternion Convert_quat_xzy_to_xyz(Quaternion quatIn)
     {
-        Quaternion quatOut = new Quaternion(
-            quatIn.x, //TODO: QUAT CONVERSION
-            quatIn.y,
-            quatIn.z,
-            quatIn.w
+        // Quaternion quatOut = new Quaternion(
+        //     quatIn.x, //TODO: QUAT CONVERSION
+        //     -quatIn.y,
+        //     -quatIn.z,
+        //     quatIn.w
+        // );
+        
+        Vector3 euler = quatIn.eulerAngles; 
+        Quaternion quatOut = Quaternion.AngleAxis(euler.z, Vector3.forward) * Quaternion.AngleAxis(euler.y, Vector3.up) * Quaternion.AngleAxis(euler.x, Vector3.right);
+
+        quatOut = new Quaternion(
+            quatOut.x,
+            -quatOut.y,
+            -quatOut.z,
+            quatOut.w
         );
         
         // quatIn.ToAngleAxis(out float angle, out Vector3 axis);
@@ -173,7 +189,16 @@ public class DebugRBSkeleton : MonoBehaviour
     void ProcessAddtionalData(string[] unparsedData)
     {
         //Temp, just print info into textbox
-        string parsedText = unparsedData[1].Replace(separator, '\n');
-        debugUI.SetText(parsedText);
+        string rigName = unparsedData[1];
+        string parsedText = unparsedData[2].Replace(separator, '\n');
+
+        if (rigName == "original")
+        {
+            debugUI.SetText(parsedText);
+        }
+        else
+        {
+            debugUITwo.SetText(parsedText);
+        }
     }
 }
