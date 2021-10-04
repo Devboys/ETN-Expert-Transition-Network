@@ -29,8 +29,8 @@ def print_frame(root_pos, quats, rig_name: str, separator: str):
     """
 
     frame_string = f"P {rig_name} "  # frame marker + rig identifier
-    frame_string = frame_string + separator.join([str(p) for p in root_pos])  # root position
-    frame_string += separator  # separator
+    # frame_string = frame_string + separator.join([str(p) for p in root_pos])  # root position
+    # frame_string += separator  # separator
     frame_string += separator.join([str(q) for q in quats])  # quats
 
     print(frame_string)

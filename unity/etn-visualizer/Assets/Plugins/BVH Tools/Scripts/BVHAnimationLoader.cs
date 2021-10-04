@@ -52,9 +52,15 @@ public class BVHAnimationLoader : MonoBehaviour {
         public string targetName;
     }
 
-    // BVH to Unity
-    private Quaternion fromEulerZXY(Vector3 euler) {
-        return Quaternion.AngleAxis(euler.z, Vector3.forward) * Quaternion.AngleAxis(euler.x, Vector3.right) * Quaternion.AngleAxis(euler.y, Vector3.up);
+    // // BVH to Unity
+    // private Quaternion fromEulerZXY(Vector3 euler) {
+    //     return Quaternion.AngleAxis(euler.z, Vector3.forward) * Quaternion.AngleAxis(euler.x, Vector3.right) * Quaternion.AngleAxis(euler.y, Vector3.up);
+    // }
+
+    // BVH to Unity, our edit.
+    private Quaternion fromEulerZXY(Vector3 euler)
+    {
+        return Quaternion.AngleAxis(euler.z, Vector3.forward) * Quaternion.AngleAxis(euler.y, Vector3.up) * Quaternion.AngleAxis(euler.x, Vector3.right);
     }
 
     private float wrapAngle(float a) {
@@ -77,7 +83,9 @@ public class BVHAnimationLoader : MonoBehaviour {
         return name;
     }
 
-    private Transform getBoneByName(string name, Transform transform, bool first) {
+    private Transform getBoneByName(string name, Transform transform, bool first)
+    {
+        name = "Model:" + name;
         string targetName = flexibleName(name);
         if (renamingMap.ContainsKey(targetName)) {
             targetName = flexibleName(renamingMap[targetName]);

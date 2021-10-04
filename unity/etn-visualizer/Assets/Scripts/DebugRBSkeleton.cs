@@ -128,61 +128,46 @@ public class DebugRBSkeleton : MonoBehaviour
 
         string[] poseUnparsed = unparsedData[2].Split(separator);
         float[] pose = Array.ConvertAll(poseUnparsed, float.Parse);
+        
         //split pose into rootpos + quats. Quat indices in data are the same as indices in the parsed hierarchy. 
         Vector3 root_pos = new Vector3(pose[0], pose[1], pose[2]);
 
-        if(rigName == "prediction")
-        {
-            root_pos += Vector3.left * 100;
-        }
-        
-        ArraySegment<float> poseQuats = new ArraySegment<float>(pose, 3, pose.Length - 3);
-        
         //Set root node position.
-        rig[0].SetPositionAndRotation(root_pos, Quaternion.identity);
+        rig[0].localPosition = root_pos;
         
         //set joint rotations
         for (int i = 0; i < rig.Count; i++)
         {
-            //Parse quat
-            Quaternion jointRot = new Quaternion(
-                poseQuats.Array[i * 4],
-                poseQuats.Array[i * 4 + 1],
-                poseQuats.Array[i * 4 + 2],
-                poseQuats.Array[i * 4 + 3]
+            Vector3 jointRot = new Vector3( //remember, BVH rot stored in ZYX order.
+                pose[3 + i * 3 + 2],
+                pose[3 + i * 3 + 1],
+                pose[3 + i * 3 + 0]
+                
             );
-            
-            //Lafan Data is in another coordinate system so we have to convert stuff first.
-            jointRot = Convert_quat_xzy_to_xyz(jointRot);
-            
-            rig[i].localRotation = jointRot;
+
+            Quaternion jointQuat = fromEulerZYX(jointRot);
+            jointQuat = leftToRightCoord(jointQuat);
+
+            rig[i].localRotation = jointQuat;
         }
         
         
     }
 
-    Quaternion Convert_quat_xzy_to_xyz(Quaternion quatIn)
+    private Quaternion fromEulerZYX(Vector3 euler)
     {
-        // Quaternion quatOut = new Quaternion(
-        //     quatIn.x, //TODO: QUAT CONVERSION
-        //     -quatIn.y,
-        //     -quatIn.z,
-        //     quatIn.w
-        // );
-        
-        Vector3 euler = quatIn.eulerAngles; 
-        Quaternion quatOut = Quaternion.AngleAxis(euler.z, Vector3.forward) * Quaternion.AngleAxis(euler.y, Vector3.up) * Quaternion.AngleAxis(euler.x, Vector3.right);
+        return Quaternion.AngleAxis(euler.z, Vector3.forward) * Quaternion.AngleAxis(euler.y, Vector3.up) * Quaternion.AngleAxis(euler.x, Vector3.right);
+    }
 
-        quatOut = new Quaternion(
-            quatOut.x,
-            -quatOut.y,
-            -quatOut.z,
-            quatOut.w
+    private Quaternion leftToRightCoord(Quaternion quatIn)
+    {
+        Quaternion quatOut = new Quaternion(
+            quatIn.x,
+            -quatIn.y,
+            -quatIn.z,
+            quatIn.w
         );
         
-        // quatIn.ToAngleAxis(out float angle, out Vector3 axis);
-        // Vector3 newAxis = new Vector3(axis.x, -axis.y, -axis.z);
-        // Quaternion quatOut = Quaternion.AngleAxis(angle, newAxis);
         return quatOut;
     }
 

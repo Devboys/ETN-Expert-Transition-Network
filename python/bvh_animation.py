@@ -150,8 +150,8 @@ class BVHAnimation:
             for joint_index in range(self.n_joints):
                 e_index = joint_index * 3 + 3  # BVH stores rotations as euler angles
                 q_index = joint_index * 4 + 3  # We want to store as quaternions
-                euler = frame[e_index:e_index+3]
-                quat = transform.quaternion_from_euler(euler[0], euler[1], euler[2], "rzyx")
+                euler = frame[e_index:e_index+3]  # in rads
+                quat = transform.quaternion_from_euler(euler[0], euler[1], euler[2], "rzyx")  # expects rads
                 anim_vec[frame_index, q_index:q_index+4] = quat
         return anim_vec
 
@@ -164,7 +164,7 @@ class BVHAnimation:
             anim_vec[frame_index, :3] = frame[:3]  # First three elements in pose is root joint position.
             for joint_index in range(self.n_joints):
                 e_index = joint_index * 3 + 3  # BVH stores rotations as euler angles
-                euler = frame[e_index:e_index + 3]
+                euler = frame[e_index:e_index + 3] * (180/np.pi)  # rots stored as rads. Convert to degrees
                 anim_vec[frame_index, e_index:e_index + 3] = euler
         return anim_vec
 

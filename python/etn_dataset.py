@@ -33,7 +33,7 @@ class ETNDataset(IterableDataset):
     def __init__(self,
                  data_dir: str,
                  train_data: 'ETNDataset' = None,
-                 subsample_factor: int = 4
+                 subsample_factor: int = 1
                  ):
         """
         An iterable, normalized dataset of animations of uniform length, read from BVH files. Data is formatted for
@@ -77,7 +77,7 @@ class ETNDataset(IterableDataset):
             self.file_indices = list()
             # Load all bvh files and format animations into expected input format.
             for file in tqdm.tqdm(bvh_paths, desc=f"Loading bvh files from {data_dir}. This will only happen once."):
-                parsed_file = self.to_etn_input(BVHAnimation(file), subsample_factor)
+                parsed_file = self.to_etn_input(BVHAnimation(file), subsample_factor, 42)
                 anims.append(parsed_file)
 
                 file_end_idx += len(parsed_file)
@@ -88,14 +88,14 @@ class ETNDataset(IterableDataset):
 
             self.animations = np.concatenate(anims)
 
-            np.savez_compressed(
-                cache_path,
-                animations=self.animations,
-                bone_offsets=self.hierarchy.bone_offsets,
-                bone_names=self.hierarchy.bone_names,
-                parent_ids=self.hierarchy.parent_ids,
-                file_indices=self.file_indices
-            )
+            # np.savez_compressed( # TODO: REVERT
+            #     cache_path,
+            #     animations=self.animations,
+            #     bone_offsets=self.hierarchy.bone_offsets,
+            #     bone_names=self.hierarchy.bone_names,
+            #     parent_ids=self.hierarchy.parent_ids,
+            #     file_indices=self.file_indices
+            # )
 
         # Resolve norm-params
         if train_data is None:
@@ -122,12 +122,14 @@ class ETNDataset(IterableDataset):
                 # TODO: Add labels as output of iterator and include in generator code
                 yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts
 
-    def to_etn_input(self, animation: BVHAnimation, subsample_factor: int):
+    def to_etn_input(self, animation: BVHAnimation, subsample_factor: int, window_step: int = 15):
         """
         Process a BVHAnimation and format it into the following vectors (etn input format):
         :param animation: The BVH animation to process.
         :param subsample_factor: The granularity factor, i.e. how much to subsample the dataset when fetching animations
-        :return: Returns a concatenated array of the processed vectors of length 10 + 32, overlapping by 15 frames.
+        :param window_step: Determines how many frames to step the sampling window between samples.
+        A step less than 41 will result in overlapping samples.
+        :return: Returns a concatenated array of the processed vectors of length 10 + 32.
         """
 
         # Define some basic vars
@@ -135,51 +137,52 @@ class ETNDataset(IterableDataset):
         transition_length = 30  # Amount of frames in transition.
         target_length = 2       # Amount of frames in "target context".
         window_size = past_length + transition_length + target_length
-        window_step = 15  # How many frames to step between each sample. Sample overlap if window step < size.
+        # window_step = 15  # How many frames to step between each sample. Sample overlap if window step < size.
 
         processed_data = list()
 
-        animation = animation.as_local_quaternions(subsample_factor)
-        for window_index in range(1, len(animation), window_step):
+        animation = animation.as_local_euler(subsample_factor)  # TODO: REVERT
+        for window_index in range(0, len(animation), window_step):
             frames = animation[window_index: window_index + window_size]
             if len(frames) != window_size:
                 continue  # Skip samples with too few frames
 
             # Frame info vector(s)
             frames_copy = deepcopy(frames[1:])
-            quats = frames_copy[:, 3:]
-            root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
+            quats = frames_copy
+            # root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
+            root_vel = frames_copy[:, :3]  # root positions only TODO: REVERT
 
             # Offset vector(s)
-            offsets = np.array([frames[i] - frames[-1] for i in range(0, window_size-1)])
+            offsets = np.array([frames_copy[i] - frames_copy[-1] for i in range(0, window_size-1)])
             root_offsets = offsets[:, :3]
-            quat_offsets = offsets[:, 3:]
+            rot_offsets = offsets[:, 3:]
 
             # Target vector(s)
-            target_frame = frames[-1, 3:]  # Note: This is quats only.
+            target_frame = frames_copy[-1, 3:]  # Note: This is rotation only.
 
             # Global joint positions (through FK)
-            global_positions = np_forward_kinematics_batch(
-                np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0),
-                np.concatenate([root_vel, quats], axis=1), self.hierarchy.parent_ids, joint_count=self.hierarchy.bone_count())
+            # global_positions = np_forward_kinematics_batch(
+            #     np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0),
+            #     np.concatenate([root_vel, quats], axis=1), self.hierarchy.parent_ids, joint_count=self.hierarchy.bone_count())
 
             # Contacts
-            pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))
-            contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
-            contacts = np.concatenate(contacts, axis=1)
+            # pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))
+            # contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
+            # contacts = np.concatenate(contacts, axis=1)
 
             # Autolabel frames.
-            labels = self.extract_labels(root_vel, global_positions[:, :3])
+            # labels = self.extract_labels(root_vel, global_positions[:, :3])
 
             processed_data.append(np.array([
                 root_vel,
                 quats,
                 root_offsets,
-                quat_offsets,
-                target_frame,
-                global_positions,
-                contacts,
-                labels
+                rot_offsets,
+                target_frame
+                # global_positions,
+                # contacts,
+                # labels
             ], dtype=object))
         return np.array(processed_data)
 
