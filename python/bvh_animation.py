@@ -142,7 +142,6 @@ class BVHAnimation:
     def as_local_quaternions(self, subsamplestep=1):
         new_frame_count = self.n_frames//subsamplestep
         anim_vec = np.zeros((new_frame_count, self.n_joints*4+3))
-        channel_map = { 'Xrotation': "x", 'Yrotation': "y", 'Zrotation': "z" }
 
         for frame_index in range(0, new_frame_count):
             frame = self.frames[frame_index*subsamplestep]
@@ -151,7 +150,7 @@ class BVHAnimation:
                 e_index = joint_index * 3 + 3  # BVH stores rotations as euler angles
                 q_index = joint_index * 4 + 3  # We want to store as quaternions
                 euler = frame[e_index:e_index+3]  # in rads
-                quat = transform.quaternion_from_euler(euler[0], euler[1], euler[2], "rzyx")  # expects rads
+                quat = transform.quaternion_from_euler(euler[0], euler[1], euler[2], "rzyx")  # output order is [WXYZ]
                 anim_vec[frame_index, q_index:q_index+4] = quat
         return anim_vec
 

@@ -106,15 +106,11 @@ class SampleExplorer:
         root_offset = sample[2]
         quat_offset = sample[3]
         target_frame = sample[4]
-        # glob_positions = sample[5]
-        # contacts = sample[6]
-        # labels = sample[7]
+        glob_positions = sample[5]
+        contacts = sample[6]
+        labels = sample[7]
 
-        contacts = np.tile([1, 0, 0, 0], (self.sample_length, 1))
-        labels = np.tile([0, 1, 0, 0], (self.sample_length, 1))
-
-        # root_pos = glob_positions[:, :3]
-        root_pos = root_vel
+        root_pos = glob_positions[:, :3]
         if self.mode == PlaybackMode.SEQUENCE:
             for i in range(0, len(quats)):
                 print_frame(root_pos[i], quats[i], self.rig_name, self.separator)
@@ -131,8 +127,8 @@ class SampleExplorer:
         debug_string += f"Sample-index={sample_idx}/{self.total_samples-1}" + self.separator
         debug_string += f"Frame-index={frame_idx}/{self.sample_length-1}" + self.separator
         debug_string += f"Filename={self.data.get_filename_by_index(self.sample_idx)}" + self.separator
-        # debug_string += f"Contacts=[{','.join(['1' if x else '0' for x in contacts])}]" + self.separator
-        debug_string += f"Labels={str(labels)}"
+        debug_string += f"Contacts=[{','.join(['1' if x else '0' for x in contacts])}]" + self.separator
+        debug_string += f"Labels=[{','.join(['1' if x else '0' for x in labels])}]"
 
         print(debug_string)
 

@@ -141,7 +141,7 @@ class ETNDataset(IterableDataset):
 
         processed_data = list()
 
-        animation = animation.as_local_euler(subsample_factor)  # TODO: REVERT
+        animation = animation.as_local_quaternions(subsample_factor)
         for window_index in range(0, len(animation), window_step):
             frames = animation[window_index: window_index + window_size]
             if len(frames) != window_size:
@@ -150,8 +150,7 @@ class ETNDataset(IterableDataset):
             # Frame info vector(s)
             frames_copy = deepcopy(frames[1:])
             quats = frames_copy
-            # root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
-            root_vel = frames_copy[:, :3]  # root positions only TODO: REVERT
+            root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
 
             # Offset vector(s)
             offsets = np.array([frames_copy[i] - frames_copy[-1] for i in range(0, window_size-1)])
@@ -162,27 +161,27 @@ class ETNDataset(IterableDataset):
             target_frame = frames_copy[-1, 3:]  # Note: This is rotation only.
 
             # Global joint positions (through FK)
-            # global_positions = np_forward_kinematics_batch(
-            #     np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0),
-            #     np.concatenate([root_vel, quats], axis=1), self.hierarchy.parent_ids, joint_count=self.hierarchy.bone_count())
+            global_positions = np_forward_kinematics_batch(
+                np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0),
+                np.concatenate([root_vel, quats], axis=1), self.hierarchy.parent_ids, joint_count=self.hierarchy.bone_count())
 
             # Contacts
-            # pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))
-            # contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
-            # contacts = np.concatenate(contacts, axis=1)
+            pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))
+            contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
+            contacts = np.concatenate(contacts, axis=1)
 
             # Autolabel frames.
-            # labels = self.extract_labels(root_vel, global_positions[:, :3])
+            labels = self.extract_labels(root_vel, global_positions[:, :3])
 
             processed_data.append(np.array([
                 root_vel,
                 quats,
                 root_offsets,
                 rot_offsets,
-                target_frame
-                # global_positions,
-                # contacts,
-                # labels
+                target_frame,
+                global_positions,
+                contacts,
+                labels
             ], dtype=object))
         return np.array(processed_data)
 
@@ -220,7 +219,7 @@ class ETNDataset(IterableDataset):
         # standing_labels = [1 if pos > height_thresh else 0 for pos in root_pos]  # EXAMPLE
         # labels = np.concatenate(moving_labels, standing_labels, axis=1)
 
-        return [1, 0, 1, 0]
+        return np.tile([0, 1, 0, 1], (len(root_vel), 1))
 
     def get_filename_by_index(self, idx) -> str:
         """

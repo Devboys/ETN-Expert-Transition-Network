@@ -14,8 +14,6 @@ def print_hierarchy(hierarchy: HierarchyDefinition, hierarchy_name: str, separat
     out_string += separator.join(hierarchy.bone_names)
     print(out_string)
 
-    #TODO: ENSURE ORDER IS CORRECT. IDENTITY ROT FOR EVERY JOINT BUT CONTROL JOINT
-
 
 def print_frame(root_pos, quats, rig_name: str, separator: str):
     """

@@ -8,6 +8,8 @@ using UnityEngine;
 public class DebugRBSkeleton : MonoBehaviour
 {
     [SerializeField] private int framerate;
+    [Tooltip("If enabled, will force root joint to position (0,0,0) in every frame.")]
+    [SerializeField] private bool forceRootOrigin;
 
     private float timer;
     private float frameTime;
@@ -19,6 +21,7 @@ public class DebugRBSkeleton : MonoBehaviour
     private Dictionary<string, List<Transform>> rigList;
 
     private char separator = ';'; // must match with python-side separator.
+    
 
     private void Awake()
     {
@@ -131,6 +134,10 @@ public class DebugRBSkeleton : MonoBehaviour
         
         //split pose into rootpos + quats. Quat indices in data are the same as indices in the parsed hierarchy. 
         Vector3 root_pos = new Vector3(pose[0], pose[1], pose[2]);
+        if (forceRootOrigin)
+        {
+            root_pos = Vector3.zero;
+        }
 
         //Set root node position.
         rig[0].localPosition = root_pos;
@@ -138,20 +145,22 @@ public class DebugRBSkeleton : MonoBehaviour
         //set joint rotations
         for (int i = 0; i < rig.Count; i++)
         {
-            Vector3 jointRot = new Vector3( //remember, BVH rot stored in ZYX order.
-                pose[3 + i * 3 + 2],
-                pose[3 + i * 3 + 1],
-                pose[3 + i * 3 + 0]
-                
-            );
+            double w = pose[3 + i * 4 + 0];
+            double x = pose[3 + i * 4 + 1];
+            double y = pose[3 + i * 4 + 2];
+            double z = pose[3 + i * 4 + 3];
 
-            Quaternion jointQuat = fromEulerZYX(jointRot);
-            jointQuat = leftToRightCoord(jointQuat);
+            Quaternion parsedQuat = new Quaternion(
+                pose[3 + i * 4 + 1],
+                pose[3 + i * 4 + 2],
+                pose[3 + i * 4 + 3],
+                pose[3 + i * 4 + 0]
+            );
+            
+            Quaternion jointQuat = leftToRightCoord(parsedQuat);
 
             rig[i].localRotation = jointQuat;
         }
-        
-        
     }
 
     private Quaternion fromEulerZYX(Vector3 euler)
