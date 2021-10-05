@@ -78,7 +78,10 @@ public class PythonLauncher : MonoBehaviour
         {
             data.Add(e.Data);
         }
-        else PrintDebugInformation(e.Data);
+        else if (e.Data != "Cont?") // Skip superfluous message.
+        {
+            PrintDebugInformation(e.Data);
+        }
     }
 
     void OnApplicationQuit()

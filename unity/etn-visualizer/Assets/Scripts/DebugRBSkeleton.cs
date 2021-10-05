@@ -145,11 +145,6 @@ public class DebugRBSkeleton : MonoBehaviour
         //set joint rotations
         for (int i = 0; i < rig.Count; i++)
         {
-            double w = pose[3 + i * 4 + 0];
-            double x = pose[3 + i * 4 + 1];
-            double y = pose[3 + i * 4 + 2];
-            double z = pose[3 + i * 4 + 3];
-
             Quaternion parsedQuat = new Quaternion(
                 pose[3 + i * 4 + 1],
                 pose[3 + i * 4 + 2],
