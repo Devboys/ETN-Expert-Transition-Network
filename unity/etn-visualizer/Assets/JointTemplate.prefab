@@ -55,6 +55,8 @@ MeshRenderer:
   m_MotionVectors: 1
   m_LightProbeUsage: 1
   m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -79,6 +81,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &8999095260897232073
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -91,4 +94,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3fef8cd4a69cfd4ea6d0e2a374e4fda, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  drawColor: {r: 0, g: 0, b: 0, a: 1}
+  originalColor: {r: 0, g: 0, b: 1, a: 1}
+  predictionColor: {r: 1, g: 0, b: 0, a: 1}
+  drawColor: {r: 1, g: 0.6428979, b: 0.23113209, a: 1}

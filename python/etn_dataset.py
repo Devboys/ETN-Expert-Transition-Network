@@ -148,7 +148,7 @@ class ETNDataset(IterableDataset):
 
             # Frame info vector(s)
             frames_copy = deepcopy(frames[1:])
-            quats = frames_copy
+            quats = frames_copy[:, 3:]
             root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
 
             # Offset vector(s)
@@ -157,16 +157,20 @@ class ETNDataset(IterableDataset):
             quat_offsets = offsets[:, 3:]
 
             # Target vector(s)
-            target_frame = frames_copy[-1, 3:]  # Note: This is rotation only.
+            target_frame = frames_copy[-1, 3:]  # Note: This is quats only.
 
-            fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size-1, 0)
-            fk_pose = np.concatenate([root_vel, quats], axis=1)
             # Global joint positions (through FK)
+            fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0)
+            fk_pose = np.concatenate([root_vel, quats], axis=1)
             global_positions = np_forward_kinematics_batch(
                 offsets=fk_offsets,
                 pose=fk_pose,
                 parents=self.hierarchy.parent_ids,
-                joint_count=self.hierarchy.bone_count())
+                joint_count=self.hierarchy.bone_count()
+            )
+
+            # root_positions = frames[:-1, :3]
+            # global_positions[:] = [global_positions[:]]
 
             # Contacts
             pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))

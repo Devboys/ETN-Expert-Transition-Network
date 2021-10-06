@@ -10,6 +10,8 @@ public class DebugAnimModel : MonoBehaviour
     [SerializeField] private int framerate;
     [Tooltip("If enabled, will force root joint to position (0,0,0) in every frame.")]
     [SerializeField] private bool forceRootOrigin;
+
+    [SerializeField] private bool showGlobalPosDebug;
     
     [SerializeField] private GameObject jointTemplate;
 
@@ -20,16 +22,18 @@ public class DebugAnimModel : MonoBehaviour
     public TMPro.TextMeshProUGUI debugUITwo;
 
     // private Dictionary<string, Dictionary<string, Transform>> skeletonList;
-    private Dictionary<string, List<Transform>> rigList;
+    private Dictionary<string, List<Transform>> rigList; //holds models
+    private Dictionary<string, List<Transform>> generatedRigList;  // holds generated hierarchies.
 
     private char separator = ';'; // must match with python-side separator.
     
 
-    private void Awake()
+    void Awake()
     {
         frameTime = 1f / framerate;
         timer = 0;
         rigList = new Dictionary<string, List<Transform>>();
+        generatedRigList = new Dictionary<string, List<Transform>>();
     }
 
     void Update()
@@ -66,9 +70,12 @@ public class DebugAnimModel : MonoBehaviour
             case "H": // Hierarchy definition
                 ProcessHierarchyDefinition(messageSplit);
                 break;
-            case "P": // Animation pose
-                ProcessPoseData(messageSplit);
+            case "P": // Animation pose, rotations
+                ProcessPoseData_Quats(messageSplit);
                 timer = frameTime;
+                break;
+            case "G": //Animation pose, global positions
+                ProcessPoseData_Positions(messageSplit);
                 break;
             case "A": // Additional anim data (per frame)
                 ProcessAddtionalData(messageSplit);
@@ -85,6 +92,9 @@ public class DebugAnimModel : MonoBehaviour
     {
         string rigName = unparsedData[1];
         string[] jointList = unparsedData[2].Split(separator);
+        string[] parentList = unparsedData[3].Split(separator);
+        
+        GenerateRigFromDefinition(rigName, jointList, parentList);
         
         GameObject rigParent = GameObject.Find($@"model_{rigName}");
 
@@ -100,7 +110,7 @@ public class DebugAnimModel : MonoBehaviour
         {
             var childList = rigParent.GetComponentsInChildren<Transform>();
             Transform jointTransform = null;
-            
+
             foreach (Transform childTransform in childList)
             {
                 if (childTransform.gameObject.name == $@"Model:{jointName}")
@@ -121,7 +131,7 @@ public class DebugAnimModel : MonoBehaviour
         
     }
 
-    void ProcessPoseData(string[] unparsedData)
+    void ProcessPoseData_Quats(string[] unparsedData)
     {
         string rigName = unparsedData[1];
         List<Transform> rig;
@@ -160,6 +170,37 @@ public class DebugAnimModel : MonoBehaviour
         }
     }
 
+    void ProcessPoseData_Positions(string[] unparsedData)
+    {
+        string rigName = unparsedData[1];
+        List<Transform> rig;
+        if (!generatedRigList.TryGetValue(rigName, out rig))
+        {
+            Debug.LogError($"POSE PROCESS ERROR: Couldn't find rig with name: '{rigName}'");
+            return;
+        }
+
+        string[] poseUnparsed = unparsedData[2].Split(separator);
+        float[] pose = Array.ConvertAll(poseUnparsed, float.Parse);
+
+        //set joint positions
+        for (int i = 0; i < rig.Count; i++)
+        {
+            Vector3 jointPos = new Vector3(
+                -pose[i * 3 + 0],
+                pose[i * 3 + 1],
+                pose[i * 3 + 2]
+            );
+
+            rig[i].position = jointPos; //Note, this is global position
+        }
+
+        if (forceRootOrigin)
+        {
+            rig[0].position = Vector3.zero;
+        }
+    }
+
     void ProcessAddtionalData(string[] unparsedData)
     {
         //Temp, just print info into textbox
@@ -176,7 +217,7 @@ public class DebugAnimModel : MonoBehaviour
         }
     }
     
-    private Quaternion leftToRightCoord(Quaternion quatIn)
+    Quaternion leftToRightCoord(Quaternion quatIn)
     {
         Quaternion quatOut = new Quaternion(
             quatIn.x,
@@ -186,5 +227,32 @@ public class DebugAnimModel : MonoBehaviour
         );
         
         return quatOut;
+    }
+    
+    void GenerateRigFromDefinition(string rigName, string[] jointList, string[] parentList)
+    {
+        Transform rootParent = new GameObject($"generated_{rigName}").transform;
+
+        List<Transform> transformList = new List<Transform>();
+        int[] parsedParentList = Array.ConvertAll(parentList, int.Parse);
+        
+        // Create joints from templates
+        for (int j = 0; j < jointList.Length; j++)
+        {
+            GameObject jointGO = Instantiate(jointTemplate);
+            jointGO.name = "Gen:" + jointList[j];
+            transformList.Add(jointGO.transform);
+        }
+        
+        // Apply parent-child hierarchy
+        for (int p = 0; p < parentList.Length; p++)
+        {
+            int parentID = parsedParentList[p];
+            Transform parentTransform = (parentID == -1) ? rootParent : transformList[parentID];
+            transformList[p].parent = parentTransform;
+        }
+
+        // Save rig for pose data.
+        generatedRigList.Add(rigName, transformList);
     }
 }

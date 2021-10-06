@@ -119,6 +119,7 @@ class SampleExplorer:
         elif self.mode == PlaybackMode.FRAME:
             idx = self.frame_idx
             print_frame(root_pos[idx], quats[idx], self.rig_name, self.separator)
+            self.print_positions(glob_positions[idx], self.rig_name)
             self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx], root_vel[idx], self.rig_name)
 
     def print_frame_debug(self, sample_idx, frame_idx, contacts, labels, root_vel, rig_name: str):
@@ -135,6 +136,12 @@ class SampleExplorer:
         debug_string += f"z:{root_vel[2]}"
 
         print(debug_string)
+
+    def print_positions(self, glob_positions, rig_name:str):
+        frame_string = f"G {rig_name} "  # frame marker + rig identifier
+        frame_string += self.separator.join([str(j) for j in glob_positions])  # quats
+
+        print(frame_string)
 
 
 run()  # Encapsulate run behaviour to prevent globals
