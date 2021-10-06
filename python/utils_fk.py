@@ -64,7 +64,7 @@ def np_forward_kinematics_batch(offsets, pose, parents, joint_count=22):
 
 def torch_forward_kinematics_batch(offsets, pose, parents, joint_count):
     """
-    Computes the final positions and rotations in global space of joints in a skeleton hierarchy.
+    Computes the global positions and rotations in global space of joints in a hierarchy.
     :param offsets: Batch of shape (batch_size, num_joints*3) of local offsets of each joint o
     :param pose: Batch of shape (batch_size, num_joints*4+3) of Vectors containing the root joint position and a joints' local quaternions
     :param parents: One-dimensional vector representing the mapping from a joint to its parent
@@ -85,12 +85,6 @@ def torch_forward_kinematics_batch(offsets, pose, parents, joint_count):
         rv = pw * qv + qw * pv + t.cross(qv, pv)
         rs = pw * qw - t.matmul(pv, t.transpose(qv, 0, 1)).diagonal().reshape((q.shape[0], 1))
         return t.cat([rs, rv], dim=1)
-
-    # Custom quaternion-vector multiplication
-    # def mulv(q, v):
-    #     zero = t.zeros([v.shape[0], 1], dtype=t.float32, device="cuda" if t.cuda.is_available() else "cpu")
-    #     p = t.cat([zero, v[:, :1], v[:, 1:2], v[:, 2:3]], dim=1)
-    #     return mul(mul(q,p), get_conjugate(q))[:, 1:]
 
     # Quaternion-vector multiplication From lafan1 repo
     def mulv(q, v):

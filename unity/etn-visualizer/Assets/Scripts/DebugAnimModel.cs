@@ -29,7 +29,6 @@ public class DebugAnimModel : MonoBehaviour
     {
         frameTime = 1f / framerate;
         timer = 0;
-        // skeletonList = new Dictionary<string, Dictionary<string, Transform>>();
         rigList = new Dictionary<string, List<Transform>>();
     }
 

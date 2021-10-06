@@ -33,7 +33,7 @@ class ETNDataset(IterableDataset):
     def __init__(self,
                  data_dir: str,
                  train_data: 'ETNDataset' = None,
-                 subsample_factor: int = 1
+                 subsample_factor: int = 4
                  ):
         """
         An iterable, normalized dataset of animations of uniform length, read from BVH files. Data is formatted for
@@ -140,7 +140,7 @@ class ETNDataset(IterableDataset):
 
         processed_data = list()
 
-        animation = animation.as_local_quaternions(subsample_factor)
+        animation = animation.as_local_quaternions(10)
         for window_index in range(0, len(animation), window_step):
             frames = animation[window_index: window_index + window_size]
             if len(frames) != window_size:
@@ -159,11 +159,12 @@ class ETNDataset(IterableDataset):
             # Target vector(s)
             target_frame = frames_copy[-1, 3:]  # Note: This is rotation only.
 
+            fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size-1, 0)
+            fk_pose = np.concatenate([root_vel, quats], axis=1)
             # Global joint positions (through FK)
             global_positions = np_forward_kinematics_batch(
-                offsets=np.repeat(self.hierarchy.bone_offsets.reshape(
-                    [1, self.hierarchy.bone_count(), 3]), window_size-1, 0),
-                pose=np.concatenate([root_vel, quats], axis=1),
+                offsets=fk_offsets,
+                pose=fk_pose,
                 parents=self.hierarchy.parent_ids,
                 joint_count=self.hierarchy.bone_count())
 
@@ -191,7 +192,7 @@ class ETNDataset(IterableDataset):
         """
         Extracts binary tensors of feet contacts
 
-        :param pos: tensor of global positions of shape [n_frames, n_joints, 3]
+        :param pos: tensor of global joint positions of shape [n_frames, n_joints, 3]
         :param lfoot_idx: hierarchy indices of left foot joints (heel_idx, toe_idx)
         :param rfoot_idx: hierarchy indices of right foot joints (heel_idx, toe_idx)
         :param vel_threshold: velocity threshold to consider a joint moving or not.
