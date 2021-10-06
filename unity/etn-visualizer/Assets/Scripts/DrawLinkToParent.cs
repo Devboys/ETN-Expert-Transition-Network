@@ -9,8 +9,8 @@ public class DrawLinkToParent : MonoBehaviour
     public Color predictionColor = Color.red;
 
     public Color drawColor;
-    public string skeletonName;
     
+
     // Update is called once per frame
     void Update()
     {

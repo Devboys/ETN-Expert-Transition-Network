@@ -137,7 +137,6 @@ class ETNDataset(IterableDataset):
         transition_length = 30  # Amount of frames in transition.
         target_length = 2       # Amount of frames in "target context".
         window_size = past_length + transition_length + target_length
-        # window_step = 15  # How many frames to step between each sample. Sample overlap if window step < size.
 
         processed_data = list()
 
@@ -162,8 +161,11 @@ class ETNDataset(IterableDataset):
 
             # Global joint positions (through FK)
             global_positions = np_forward_kinematics_batch(
-                np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0),
-                np.concatenate([root_vel, quats], axis=1), self.hierarchy.parent_ids, joint_count=self.hierarchy.bone_count())
+                offsets=np.repeat(self.hierarchy.bone_offsets.reshape(
+                    [1, self.hierarchy.bone_count(), 3]), window_size-1, 0),
+                pose=np.concatenate([root_vel, quats], axis=1),
+                parents=self.hierarchy.parent_ids,
+                joint_count=self.hierarchy.bone_count())
 
             # Contacts
             pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))

@@ -5,11 +5,13 @@ using System.Globalization;
 using System.Security;
 using UnityEngine;
 
-public class DebugRBSkeleton : MonoBehaviour
+public class DebugAnimModel : MonoBehaviour
 {
     [SerializeField] private int framerate;
     [Tooltip("If enabled, will force root joint to position (0,0,0) in every frame.")]
     [SerializeField] private bool forceRootOrigin;
+    
+    [SerializeField] private GameObject jointTemplate;
 
     private float timer;
     private float frameTime;
@@ -79,6 +81,7 @@ public class DebugRBSkeleton : MonoBehaviour
 
         }
     }
+    
     void ProcessHierarchyDefinition(string[] unparsedData)
     {
         string rigName = unparsedData[1];
@@ -118,7 +121,7 @@ public class DebugRBSkeleton : MonoBehaviour
         Debug.Log("Registered hierarchy: " + rigName);
         
     }
-    
+
     void ProcessPoseData(string[] unparsedData)
     {
         string rigName = unparsedData[1];
@@ -158,23 +161,6 @@ public class DebugRBSkeleton : MonoBehaviour
         }
     }
 
-    private Quaternion fromEulerZYX(Vector3 euler)
-    {
-        return Quaternion.AngleAxis(euler.z, Vector3.forward) * Quaternion.AngleAxis(euler.y, Vector3.up) * Quaternion.AngleAxis(euler.x, Vector3.right);
-    }
-
-    private Quaternion leftToRightCoord(Quaternion quatIn)
-    {
-        Quaternion quatOut = new Quaternion(
-            quatIn.x,
-            -quatIn.y,
-            -quatIn.z,
-            quatIn.w
-        );
-        
-        return quatOut;
-    }
-
     void ProcessAddtionalData(string[] unparsedData)
     {
         //Temp, just print info into textbox
@@ -189,5 +175,17 @@ public class DebugRBSkeleton : MonoBehaviour
         {
             debugUITwo.SetText(parsedText);
         }
+    }
+    
+    private Quaternion leftToRightCoord(Quaternion quatIn)
+    {
+        Quaternion quatOut = new Quaternion(
+            quatIn.x,
+            -quatIn.y,
+            -quatIn.z,
+            quatIn.w
+        );
+        
+        return quatOut;
     }
 }
