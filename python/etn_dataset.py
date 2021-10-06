@@ -33,7 +33,10 @@ class ETNDataset(IterableDataset):
     def __init__(self,
                  data_dir: str,
                  train_data: 'ETNDataset' = None,
-                 subsample_factor: int = 4
+                 subsample_factor: int = 4,
+                 past_length: int = 10,
+                 transition_length: int = 30,
+                 window_step: int = 15
                  ):
         """
         An iterable, normalized dataset of animations of uniform length, read from BVH files. Data is formatted for
@@ -122,21 +125,30 @@ class ETNDataset(IterableDataset):
                 # TODO: Add labels as output of iterator and include in generator code
                 yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts
 
-    def to_etn_input(self, animation: BVHAnimation, subsample_factor: int, window_step: int = 15):
+    def to_etn_input(self, animation: BVHAnimation, subsample_factor: int, past_length: int = 10, transition_length: int = 30, window_step: int = 15) -> np.ndarray:
         """
-        Process a BVHAnimation and format it into the following vectors (etn input format):
+        Process a BVHAnimation and divide into samples of vectors of size (past_length + transition_length + 1).
+            Each sample consists of a list of values for every frame:\n
+            [0]=root joint velocity.\n
+            [1]=pr-joint quaternion roations.\n
+            [2]=root joint offsets from target frame.\n
+            [3]=pr-joint quaternion offset from target frame.\n
+            [4]=pr-joint quaternion rotations of target frame.\n
+            [5]=global positions of every joint.\n
+            [6]=contact tensors of feet joints.\n
+            [7]=labels.
+
         :param animation: The BVH animation to process.
         :param subsample_factor: The granularity factor, i.e. how much to subsample the dataset when fetching animations
+        :param past_length: How many past-context frames to include in the sample.
+        :param transition_length: How many ground-truth transition frames to include in the sample.
         :param window_step: Determines how many frames to step the sampling window between samples.
-        A step less than 41 will result in overlapping samples.
-        :return: Returns a concatenated array of the processed vectors of length 10 + 32.
+         A step less than (past_length + transition_length + 1) will result in overlapping samples.
+        :return: An np.array of every sample extracted from the BVHAnimation file.
         """
 
         # Define some basic vars
-        past_length = 10        # Amount of frames in "past context".
-        transition_length = 30  # Amount of frames in transition.
-        target_length = 2       # Amount of frames in "target context".
-        window_size = past_length + transition_length + target_length
+        window_size = past_length + transition_length + 2  # 2 frames because target + first-frame velocity calculation.
 
         processed_data = list()
 
@@ -162,16 +174,13 @@ class ETNDataset(IterableDataset):
 
             # Global joint positions (through FK)
             fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0)
-            fk_pose = frames_copy
+            fk_pose = frames_copy  # concatenated (root_pos, joint_rots)
             global_positions = np_forward_kinematics_batch(
                 offsets=fk_offsets,
                 pose=fk_pose,
                 parents=self.hierarchy.parent_ids,
                 joint_count=self.hierarchy.bone_count()
             )
-
-            # root_positions = frames[:-1, :3]
-            # global_positions[:] = [global_positions[:]]
 
             # Contacts
             pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))

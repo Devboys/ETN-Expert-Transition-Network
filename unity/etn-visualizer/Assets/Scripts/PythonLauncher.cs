@@ -24,7 +24,7 @@ public class PythonLauncher : MonoBehaviour
 
     private Process python;
     
-    private char[] _dataKeywords = { 'H', 'O', 'J', 'G', 'X', 'T', 'B', 'E', 'P', 'A'};
+    private char[] _dataKeywords = { 'H', 'G', 'P', 'A'};
     public static List<string> data = new List<string>();
     [SerializeField]
     private int _dataCount;

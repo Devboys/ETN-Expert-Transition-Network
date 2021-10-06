@@ -9,7 +9,7 @@ def run():
     # load dataset
     project_dir = str(pathlib.Path(__file__).parent.parent.absolute())
     data_path = f"{project_dir}/data/lafan1_single/train"
-    data = ETNDataset(data_path)
+    data = ETNDataset(data_path, window_step=41)
     player = SampleExplorer(sample_size=32, anim_dataset=data)
     player.play()
 
@@ -35,7 +35,6 @@ class SampleExplorer:
             in_message = input("Cont?\n")
             message = in_message.split(self.separator)
 
-            # try:
             key = message[0]
             args = message[1:]
 
@@ -77,10 +76,6 @@ class SampleExplorer:
             else:
                 print("ERROR: could not parse message. Try again.\n")
 
-            # except Exception as e:
-            #     print(f"Caught error with input: {in_message}")
-            #     print(f"Error Message:", e)
-
     def wrap_idx(self):
 
         # Wrap frame_idx first since this can influence sample_idx
@@ -114,6 +109,7 @@ class SampleExplorer:
         if self.mode == PlaybackMode.SEQUENCE:
             for i in range(0, len(quats)):
                 print_frame(root_pos[i], quats[i], self.rig_name, self.separator)
+                self.print_positions(glob_positions[i], self.rig_name)
                 self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i], root_vel[i], self.rig_name)
 
         elif self.mode == PlaybackMode.FRAME:
