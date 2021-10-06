@@ -146,10 +146,11 @@ class ETNDataset(IterableDataset):
             if len(frames) != window_size:
                 continue  # Skip samples with too few frames
 
+            root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
+
             # Frame info vector(s)
             frames_copy = deepcopy(frames[1:])
             quats = frames_copy[:, 3:]
-            root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
 
             # Offset vector(s)
             offsets = np.array([frames_copy[i] - frames_copy[-1] for i in range(0, window_size-1)])
@@ -161,7 +162,7 @@ class ETNDataset(IterableDataset):
 
             # Global joint positions (through FK)
             fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0)
-            fk_pose = np.concatenate([root_vel, quats], axis=1)
+            fk_pose = frames_copy
             global_positions = np_forward_kinematics_batch(
                 offsets=fk_offsets,
                 pose=fk_pose,
