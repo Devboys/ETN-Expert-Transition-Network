@@ -80,7 +80,11 @@ class ETNDataset(IterableDataset):
             self.file_indices = list()
             # Load all bvh files and format animations into expected input format.
             for file in tqdm.tqdm(bvh_paths, desc=f"Loading bvh files from {data_dir}. This will only happen once."):
-                parsed_file = self.to_etn_input(BVHAnimation(file), subsample_factor, 42)
+                parsed_file = self.to_etn_input(animation=BVHAnimation(file),
+                                                subsample_factor=subsample_factor,
+                                                past_length=past_length,
+                                                transition_length=transition_length,
+                                                window_step=window_step)
                 anims.append(parsed_file)
 
                 file_end_idx += len(parsed_file)
