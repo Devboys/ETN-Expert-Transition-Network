@@ -219,7 +219,7 @@ class ETNDataset(IterableDataset):
         # standing_labels = [1 if pos > height_thresh else 0 for pos in root_pos]  # EXAMPLE
         # labels = np.concatenate(moving_labels, standing_labels, axis=1)
 
-        return np.tile([0, 1, 0, 1], (len(root_vel), 1))
+        return np.tile([0, 1, 0, 1], (len(root_vel), 1))  # placeholder
 
     def get_filename_by_index(self, idx) -> str:
         """

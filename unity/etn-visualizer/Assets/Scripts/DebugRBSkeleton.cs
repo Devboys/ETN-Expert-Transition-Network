@@ -133,7 +133,7 @@ public class DebugRBSkeleton : MonoBehaviour
         float[] pose = Array.ConvertAll(poseUnparsed, float.Parse);
         
         //split pose into rootpos + quats. Quat indices in data are the same as indices in the parsed hierarchy. 
-        Vector3 root_pos = new Vector3(pose[0], pose[1], pose[2]);
+        Vector3 root_pos = new Vector3(-pose[0],pose[1], pose[2] );
         if (forceRootOrigin)
         {
             root_pos = Vector3.zero;
