@@ -140,7 +140,7 @@ class ETNDataset(IterableDataset):
 
         processed_data = list()
 
-        animation = animation.as_local_quaternions(10)
+        animation = animation.as_local_quaternions(subsample_factor)
         for window_index in range(0, len(animation), window_step):
             frames = animation[window_index: window_index + window_size]
             if len(frames) != window_size:
@@ -154,7 +154,7 @@ class ETNDataset(IterableDataset):
             # Offset vector(s)
             offsets = np.array([frames_copy[i] - frames_copy[-1] for i in range(0, window_size-1)])
             root_offsets = offsets[:, :3]
-            rot_offsets = offsets[:, 3:]
+            quat_offsets = offsets[:, 3:]
 
             # Target vector(s)
             target_frame = frames_copy[-1, 3:]  # Note: This is rotation only.
@@ -180,7 +180,7 @@ class ETNDataset(IterableDataset):
                 root_vel,
                 quats,
                 root_offsets,
-                rot_offsets,
+                quat_offsets,
                 target_frame,
                 global_positions,
                 contacts,
