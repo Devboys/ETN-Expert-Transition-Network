@@ -132,7 +132,7 @@ class ETNDataset(IterableDataset):
     def to_etn_input(self, animation: BVHAnimation, subsample_factor: int, past_length: int = 10, transition_length: int = 30, window_step: int = 15) -> np.ndarray:
         """
         Process a BVHAnimation and divide into samples of vectors of size (past_length + transition_length + 1).
-            Each sample consists of a list of values for every frame:\n
+            Each sample consists of a tuple of values for every frame:\n
             [0]=root joint velocity.\n
             [1]=pr-joint quaternion roations.\n
             [2]=root joint offsets from target frame.\n
@@ -143,7 +143,7 @@ class ETNDataset(IterableDataset):
             [7]=labels.
 
         :param animation: The BVH animation to process.
-        :param subsample_factor: The granularity factor, i.e. how much to subsample the dataset when fetching animations
+        :param subsample_factor: The granularity factor. ex: factor=4 will extract every 4th frame from the animation.
         :param past_length: How many past-context frames to include in the sample.
         :param transition_length: How many ground-truth transition frames to include in the sample.
         :param window_step: Determines how many frames to step the sampling window between samples.

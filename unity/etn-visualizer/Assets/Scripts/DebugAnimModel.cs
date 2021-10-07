@@ -73,13 +73,15 @@ public class DebugAnimModel : MonoBehaviour
                 break;
             case "P": // Animation pose, rotations
                 ProcessPoseData_Quats(messageSplit);
-                timer = frameTime;
                 break;
             case "G": //Animation pose, global positions
                 ProcessPoseData_Positions(messageSplit);
                 break;
             case "A": // Additional anim data (per frame)
                 ProcessAddtionalData(messageSplit);
+                break;
+            case "E": //end of frame info
+                timer = frameTime;
                 break;
             default:
                 Debug.LogError($"MESSAGE PARSE ERROR: Unhandled marker: '{marker}'");

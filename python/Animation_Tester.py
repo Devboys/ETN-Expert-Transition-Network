@@ -111,6 +111,7 @@ class SampleExplorer:
                 print_frame(root_pos[i], quats[i], self.rig_name, self.separator)
                 self.print_positions(glob_positions[i], self.rig_name)
                 self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i], root_vel[i], self.rig_name)
+                print("E")
 
         elif self.mode == PlaybackMode.FRAME:
             idx = self.frame_idx
