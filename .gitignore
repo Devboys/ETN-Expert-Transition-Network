@@ -11,5 +11,6 @@ cache.npz
 *.npz
 *.pt
 tensorboard
-/data/lafan1/*
-/data/lafan1_reduced/*
+/data/*
+!/data/lafan1_module
+!/data/ExctractLafan.ps1
