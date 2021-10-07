@@ -23,6 +23,7 @@ public class DebugAnimModel : MonoBehaviour
     // private Dictionary<string, Dictionary<string, Transform>> skeletonList;
     private Dictionary<string, List<Transform>> rigList; //holds models
     private Dictionary<string, List<Transform>> generatedRigList;  // holds generated hierarchies.
+    private Dictionary<string, Vector3> firstRootPos;
 
     private char separator = ';'; // must match with python-side separator.
     
@@ -33,6 +34,7 @@ public class DebugAnimModel : MonoBehaviour
         timer = 0;
         rigList = new Dictionary<string, List<Transform>>();
         generatedRigList = new Dictionary<string, List<Transform>>();
+        firstRootPos = new Dictionary<string, Vector3>();
     }
 
     void Update()
@@ -121,6 +123,14 @@ public class DebugAnimModel : MonoBehaviour
             root_pos = Vector3.zero;
         }
 
+        //make animation start at initial GO position
+        if (!firstRootPos.TryGetValue(rigName, out Vector3 firstRoot))
+        {
+            firstRootPos.Add(rigName, root_pos);
+            firstRoot = root_pos;
+        }
+        root_pos -= firstRoot;
+
         //Set root node position.
         rig[0].localPosition = root_pos;
         
@@ -166,6 +176,14 @@ public class DebugAnimModel : MonoBehaviour
             {
                 jointPos -= new Vector3(-pose[0], pose[1], pose[2]);
             }
+            
+            //make animation start at initial GO position
+            if (!firstRootPos.TryGetValue(rigName, out Vector3 firstRoot))
+            {
+                firstRootPos.Add(rigName, jointPos);
+                firstRoot = jointPos;
+            }
+            jointPos -= firstRoot;
 
             rig[i].position = jointPos + rig[0].parent.position; //Note, this is global position
             

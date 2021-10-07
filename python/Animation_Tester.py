@@ -110,16 +110,16 @@ class SampleExplorer:
             for i in range(0, len(quats)):
                 print_frame(root_pos[i], quats[i], self.rig_name, self.separator)
                 self.print_positions(glob_positions[i], self.rig_name)
-                self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i], root_vel[i], self.rig_name)
+                self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i], self.rig_name)
                 print("E")
 
         elif self.mode == PlaybackMode.FRAME:
             idx = self.frame_idx
             print_frame(root_pos[idx], quats[idx], self.rig_name, self.separator)
             self.print_positions(glob_positions[idx], self.rig_name)
-            self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx], root_vel[idx], self.rig_name)
+            self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx], self.rig_name)
 
-    def print_frame_debug(self, sample_idx, frame_idx, contacts, labels, root_vel, rig_name: str):
+    def print_frame_debug(self, sample_idx, frame_idx, contacts, labels, rig_name: str):
 
         debug_string = f"A {rig_name} "  # Marker must always be first element
         debug_string += f"Sample-index={sample_idx}/{self.total_samples-1}" + self.separator
@@ -127,10 +127,7 @@ class SampleExplorer:
         debug_string += f"Filename={self.data.get_filename_by_index(self.sample_idx)}" + self.separator
         debug_string += f"---------------" + self.separator
         debug_string += f"Contacts=[{','.join(['1' if x else '0' for x in contacts])}]" + self.separator
-        debug_string += f"Labels=[{','.join(['1' if x else '0' for x in labels])}]" + self.separator
-        debug_string += f"x:{root_vel[0]}" + self.separator
-        debug_string += f"y:{root_vel[1]}" + self.separator
-        debug_string += f"z:{root_vel[2]}"
+        debug_string += f"Labels=[{','.join(['1' if x else '0' for x in labels])}]"
 
         print(debug_string)
 
