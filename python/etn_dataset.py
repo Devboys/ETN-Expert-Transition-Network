@@ -55,7 +55,7 @@ class ETNDataset(IterableDataset):
         self.lfoot_idx = [3, 4]
         self.rfoot_idx = [7, 8]
         # Velocity threshold value for contact-calculations
-        self.velfactor = 0.02
+        self.velfactor = 1.7
 
         cache_path = data_dir + '/etn_cache.npz'
         if os.path.exists(cache_path):
@@ -186,12 +186,12 @@ class ETNDataset(IterableDataset):
                 joint_count=self.hierarchy.bone_count()
             )
 
-            # Contacts
+            # Contact tensors
             pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))
-            contacts = self.extract_feet_contacts(pos, self.lfoot_idx, self.rfoot_idx, self.velfactor)
+            contacts = self.extract_feet_contacts(pos)
             contacts = np.concatenate(contacts, axis=1)
 
-            # Autolabel frames.
+            # Frame labels
             labels = self.extract_labels(root_vel, global_positions[:, :3])
 
             processed_data.append(np.array([
@@ -206,7 +206,7 @@ class ETNDataset(IterableDataset):
             ], dtype=object))
         return np.array(processed_data)
 
-    def extract_feet_contacts(self, pos, lfoot_idx, rfoot_idx, vel_threshold=0.02):
+    def extract_feet_contacts(self, pos):
         """
         Extracts binary tensors of feet contacts
 
@@ -217,10 +217,12 @@ class ETNDataset(IterableDataset):
         :return: binary tensors of (left foot contacts, right foot contacts) pr frame. Last frame is duplicated once.
         """
 
-        lfoot_xyz = (pos[1:, lfoot_idx, :] - pos[:-1, lfoot_idx, :]) ** 2
+        vel_threshold = self.velfactor ** 2
+
+        lfoot_xyz = (pos[1:, self.lfoot_idx, :] - pos[:-1, self.lfoot_idx, :]) ** 2
         contacts_l = (np.sum(lfoot_xyz, axis=-1) < vel_threshold)
 
-        rfoot_xyz = (pos[1:, rfoot_idx, :] - pos[:-1, rfoot_idx, :]) ** 2
+        rfoot_xyz = (pos[1:, self.rfoot_idx, :] - pos[:-1, self.rfoot_idx, :]) ** 2
         contacts_r = (np.sum(rfoot_xyz, axis=-1) < vel_threshold)
 
         # Duplicate the last frame for shape consistency. Offset shouldn't be a problem because velocities are averages

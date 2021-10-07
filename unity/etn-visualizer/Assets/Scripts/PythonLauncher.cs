@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Linq;
 using IngameDebugConsole;
+using JetBrains.Annotations;
 using Debug = UnityEngine.Debug;
 
 public class PythonLauncher : MonoBehaviour
@@ -19,7 +20,7 @@ public class PythonLauncher : MonoBehaviour
     private string _pythonInterpreterPath;
     [SerializeField]
     private string _arguments = "";
-    [SerializeField]
+    [SerializeField] 
     private ProcessStatus _processStatus = ProcessStatus.Uninitialized;
 
     private Process python;
@@ -28,7 +29,7 @@ public class PythonLauncher : MonoBehaviour
     public static List<string> data = new List<string>();
     [SerializeField]
     private int _dataCount;
-
+    
     private bool _processing = false;
 
     private bool paused = false;

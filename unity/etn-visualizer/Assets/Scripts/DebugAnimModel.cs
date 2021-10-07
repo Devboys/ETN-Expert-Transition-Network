@@ -10,10 +10,8 @@ public class DebugAnimModel : MonoBehaviour
 {
     [SerializeField] private int framerate;
     [Tooltip("If enabled, will force root joint to position (0,0,0) in every frame.")]
-    [SerializeField] private bool forceRootOrigin;
+    [SerializeField] private bool lockRootPos;
 
-    [SerializeField] private bool showGlobalPosDebug;
-    
     [SerializeField] private GameObject jointTemplate;
 
     private float timer;
@@ -80,14 +78,12 @@ public class DebugAnimModel : MonoBehaviour
             case "A": // Additional anim data (per frame)
                 ProcessAddtionalData(messageSplit);
                 break;
-            case "E": //end of frame info
+            case "E": //end-of-frame info
                 timer = frameTime;
                 break;
             default:
                 Debug.LogError($"MESSAGE PARSE ERROR: Unhandled marker: '{marker}'");
                 break;
-
-
         }
     }
     
@@ -97,8 +93,10 @@ public class DebugAnimModel : MonoBehaviour
         string[] jointList = unparsedData[2].Split(separator);
         int[] parentList = Array.ConvertAll(unparsedData[3].Split(separator), int.Parse);
         
-        GenerateRigFromDefinition(rigName, jointList, parentList);
-        RegisterModelRig(rigName, jointList);
+        Transform rootParent = GameObject.Find($@"model_{rigName}").transform;
+        
+        GenerateRigFromDefinition(rigName, jointList, parentList, rootParent);
+        RegisterModelRig(rigName, jointList, rootParent);
         
         Debug.Log("Registered hierarchy: " + rigName);
     }
@@ -118,7 +116,7 @@ public class DebugAnimModel : MonoBehaviour
         
         //split pose into rootpos + quats. Quat indices in data are the same as indices in the parsed hierarchy. 
         Vector3 root_pos = new Vector3(-pose[0],pose[1], pose[2] );
-        if (forceRootOrigin)
+        if (lockRootPos)
         {
             root_pos = Vector3.zero;
         }
@@ -148,7 +146,7 @@ public class DebugAnimModel : MonoBehaviour
         List<Transform> rig;
         if (!generatedRigList.TryGetValue(rigName, out rig))
         {
-            Debug.LogError($"POSE PROCESS ERROR: Couldn't find rig with name: '{rigName}'");
+            Debug.LogError($"POSE PROCESS ERROR: Couldn't find generated rig with name: '{rigName}'");
             return;
         }
 
@@ -164,15 +162,15 @@ public class DebugAnimModel : MonoBehaviour
                 pose[i * 3 + 2]
             );
             
-            
-            rig[i].position = jointPos; //Note, this is global position
-            if (forceRootOrigin)
+            if (lockRootPos)
             {
-                rig[i].position -= new Vector3(pose[0], pose[1], pose[2]);
+                jointPos -= new Vector3(-pose[0], pose[1], pose[2]);
             }
-        }
 
-        
+            rig[i].position = jointPos + rig[0].parent.position; //Note, this is global position
+            
+            
+        }
     }
 
     void ProcessAddtionalData(string[] unparsedData)
@@ -209,10 +207,8 @@ public class DebugAnimModel : MonoBehaviour
     /// <param name="rigName"> The name of the rig. Used for dictionary lookup when processing pose data</param>
     /// <param name="jointList"> The list of joint names in the hierarchy. Order is expected to mirror rig hierarchy parsing order</param>
     /// <param name="parentList"> The list of parent-indices per joint. Each element contains the parent index of the joint at the same element-index. </param>
-    void GenerateRigFromDefinition(string rigName, string[] jointList, int[] parentList)
+    void GenerateRigFromDefinition(string rigName, string[] jointList, int[] parentList, Transform rootParent)
     {
-        Transform rootParent = new GameObject($"generated_{rigName}").transform;
-
         List<Transform> transformList = new List<Transform>();
 
         // Create joints from templates
@@ -240,13 +236,11 @@ public class DebugAnimModel : MonoBehaviour
     /// </summary>
     /// <param name="rigName">The name to identify this rig with. Will attempt to find a model with the name "model_<rigName>" </param>
     /// <param name="jointList">The list of joint names to register in the rig. Order of elements is expected to mirror rig hierarchy parsing order </param>
-    void RegisterModelRig(string rigName, string[] jointList)
+    void RegisterModelRig(string rigName, string[] jointList, Transform rootParent)
     {
-        GameObject rigParent = GameObject.Find($@"model_{rigName}");
-
         List<Transform> rigJointList = new List<Transform>();
         
-        if (rigParent == null)
+        if (rootParent == null)
         {
             Debug.LogError($"HIERARCHY PARSE ERROR: Couldn't find model for rig-name '{rigName}' ");
             return;
@@ -254,7 +248,7 @@ public class DebugAnimModel : MonoBehaviour
         
         foreach (string jointName in jointList)
         {
-            var childList = rigParent.GetComponentsInChildren<Transform>();
+            var childList = rootParent.GetComponentsInChildren<Transform>();
             Transform jointTransform = null;
 
             foreach (Transform childTransform in childList)
