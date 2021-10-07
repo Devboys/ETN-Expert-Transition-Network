@@ -4,6 +4,7 @@
 /[Bb]uild/
 /[Bb]uilds/
 /[Rr]ecordings/
+/[Ll]ogs/
 
 # Visual Studio
 /.vs/
