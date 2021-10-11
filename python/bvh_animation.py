@@ -2,9 +2,10 @@ from bvh import Bvh
 import numpy as np
 import transformations as transform
 
+
 class BVHAnimation:
-    ## missing support to channel order, so that it can automatically convert any euler angle order
-    def __init__(self, bvh_path, scale_factor: float = 1.0):
+    # missing support to channel order, so that it can automatically convert any euler angle order
+    def __init__(self, bvh_path):
         with open(bvh_path) as f:
             mocap = Bvh(f.read())
 
@@ -17,7 +18,6 @@ class BVHAnimation:
         self.frames[:, 3:] *= np.pi / 180  # rotation angles from degrees to radians
         self.frame_time = mocap.frame_time
         self.n_frames = mocap.nframes
-        self.scale_factor = scale_factor
 
     def as_local_quaternions(self, subsamplestep=1):
         new_frame_count = self.n_frames//subsamplestep
@@ -46,4 +46,3 @@ class BVHAnimation:
                 euler = frame[e_index:e_index + 3] * (180/np.pi)  # rots stored as rads. Convert to degrees
                 anim_vec[frame_index, e_index:e_index + 3] = euler
         return anim_vec
-
