@@ -11,6 +11,9 @@ using Debug = UnityEngine.Debug;
 
 public class PythonLauncher : MonoBehaviour
 {
+
+    public static PythonLauncher instance; //singleton
+
     public enum ProcessStatus {Uninitialized, Running, Terminated};
 
         
@@ -26,15 +29,19 @@ public class PythonLauncher : MonoBehaviour
     private Process python;
     
     private char[] _dataKeywords = { 'H', 'G', 'P', 'A', 'E'};
-    public static List<string> data = new List<string>();
+    public List<string> data = new List<string>();
     [SerializeField]
     private int _dataCount;
     
     private bool _processing = false;
 
     private bool paused = false;
+
     void Start()
     {
+        //very poor singleton.
+        instance = this;
+
         python = new Process();
         python.StartInfo.FileName = _pythonInterpreterPath;
         python.StartInfo.Arguments = _scriptPath + " " + _arguments;
@@ -138,14 +145,14 @@ public class PythonLauncher : MonoBehaviour
         {
             WriteToProcess("NAV;REPEAT");
         }
-        
+
         if (Input.GetKeyDown(KeyCode.Keypad1))
         {
             Debug.Log("Request Mode switch: Frame");
             WriteToProcess("MODE;FRAME");
         }
-        
-        if (Input.GetKeyDown(KeyCode.Keypad2))
+
+        else if (Input.GetKeyDown(KeyCode.Keypad2))
         {
             Debug.Log("Request Mode switch: Sequence");
             WriteToProcess("MODE;SEQ");

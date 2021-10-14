@@ -14,8 +14,9 @@ public class DebugAnimModel : MonoBehaviour
 
     [SerializeField] private GameObject jointTemplate;
 
+    public bool playContinuous = false;
+
     private float timer;
-    private float frameTime;
 
     public TMPro.TextMeshProUGUI debugUI;
     public TMPro.TextMeshProUGUI debugUITwo;
@@ -30,7 +31,6 @@ public class DebugAnimModel : MonoBehaviour
 
     void Awake()
     {
-        frameTime = 1f / framerate;
         timer = 0;
         rigList = new Dictionary<string, List<Transform>>();
         generatedRigList = new Dictionary<string, List<Transform>>();
@@ -39,27 +39,39 @@ public class DebugAnimModel : MonoBehaviour
 
     void Update()
     {
-        while (PythonLauncher.data.Count > 0)
+        if (Input.GetKeyDown(KeyCode.Keypad7))
         {
-            if (timer > 0)
-            {
-                timer -= Time.deltaTime;
-                return;
-            }
+            playContinuous = !playContinuous;
+        }
+
+        if (timer > 0)
+        {
+            timer -= Time.deltaTime;
+            return;
+        }
+
+        if (PythonLauncher.instance.data.Count > 0)
+        {
             try
             {
                 // Try consume data
-                HandlePythonData(PythonLauncher.data[0]);
-                PythonLauncher.data.RemoveAt(0);
+                HandlePythonData(PythonLauncher.instance.data[0]);
+                PythonLauncher.instance.data.RemoveAt(0);
             }
             catch (Exception e)
             {
-                Debug.LogWarning("Something went wrong with: " + PythonLauncher.data[0] + "\n" + e.Message + "\n" + e.StackTrace);
-                PythonLauncher.data.RemoveAt(0);
+                Debug.LogWarning("Something went wrong with: " + PythonLauncher.instance.data[0] + "\n" + e.Message + "\n" + e.StackTrace);
+                PythonLauncher.instance.data.RemoveAt(0);
                 throw e;
             }
         }
+        else if(playContinuous)
+        {
+            PythonLauncher.instance.WriteToProcess("NAV;NEXT");
+        }
     }
+
+    
 
     void HandlePythonData(string message)
     {
@@ -81,7 +93,8 @@ public class DebugAnimModel : MonoBehaviour
                 ProcessAddtionalData(messageSplit);
                 break;
             case "E": //end-of-frame info
-                timer = frameTime;
+                float fr = framerate > 0 ? framerate : 1; //at least 1
+                timer = 1f / fr;
                 break;
             default:
                 Debug.LogError($"MESSAGE PARSE ERROR: Unhandled marker: '{marker}'");
@@ -195,7 +208,8 @@ public class DebugAnimModel : MonoBehaviour
     {
         //Temp, just print info into textbox
         string rigName = unparsedData[1];
-        string parsedText = unparsedData[2].Replace(separator, '\n');
+        int frameIndex = int.Parse(unparsedData[2]);
+        string parsedText = unparsedData[3].Replace(separator, '\n');
 
         if (rigName == "original")
         {
@@ -205,6 +219,8 @@ public class DebugAnimModel : MonoBehaviour
         {
             debugUITwo.SetText(parsedText);
         }
+
+        PythonLauncher.instance.WriteToProcess("FRAME;" + frameIndex);
     }
     
     Quaternion leftToRightCoord(Quaternion quatIn)

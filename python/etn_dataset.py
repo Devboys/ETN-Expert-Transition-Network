@@ -33,7 +33,6 @@ class ETNDataset(IterableDataset):
     def __init__(self,
                  data_dir: str,
                  train_data: 'ETNDataset' = None,
-                 subsample_factor: int = 4,
                  past_length: int = 10,
                  transition_length: int = 30,
                  window_step: int = 15
@@ -80,8 +79,7 @@ class ETNDataset(IterableDataset):
             self.file_indices = list()
             # Load all bvh files and format animations into expected input format.
             for file in tqdm.tqdm(bvh_paths, desc=f"Loading bvh files from {data_dir}. This will only happen once."):
-                parsed_file = self.to_etn_input(animation=BVHAnimation(file),
-                                                subsample_factor=subsample_factor,
+                parsed_file = self.to_etn_input(bvh=BVHAnimation(file),
                                                 past_length=past_length,
                                                 transition_length=transition_length,
                                                 window_step=window_step)
@@ -129,7 +127,7 @@ class ETNDataset(IterableDataset):
                 # TODO: Add labels as output of iterator and include in generator code
                 yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts
 
-    def to_etn_input(self, animation: BVHAnimation, subsample_factor: int, past_length: int = 10, transition_length: int = 30, window_step: int = 15) -> np.ndarray:
+    def to_etn_input(self, bvh: BVHAnimation, past_length: int = 10, transition_length: int = 30, window_step: int = 15) -> np.ndarray:
         """
         Process a BVHAnimation and divide into samples of vectors of size (past_length + transition_length + 1).
             Each sample consists of a tuple of values for every frame:\n
@@ -142,8 +140,7 @@ class ETNDataset(IterableDataset):
             [6]=contact tensors of feet joints.\n
             [7]=labels.
 
-        :param animation: The BVH animation to process.
-        :param subsample_factor: The granularity factor. ex: factor=4 will extract every 4th frame from the animation.
+        :param bvh: The BVH animation to process.
         :param past_length: How many past-context frames to include in the sample.
         :param transition_length: How many ground-truth transition frames to include in the sample.
         :param window_step: Determines how many frames to step the sampling window between samples.
@@ -152,61 +149,76 @@ class ETNDataset(IterableDataset):
         """
 
         # Define some basic vars
-        window_size = past_length + transition_length + 2  # 2 frames because target + first-frame velocity calculation.
+        window_size = past_length + transition_length + 1  # TODO: make this one and remove -1 on all s_vars
 
         processed_data = list()
 
-        animation = animation.as_local_quaternions(subsample_factor)
-        for window_index in range(0, len(animation), window_step):
-            frames = animation[window_index: window_index + window_size]
+        subsample_factor = 4
+        animation = bvh.as_local_quaternions(subsample_factor)
+
+        root_vel = self.extract_root_velocities(animation)
+        quats = animation[:, 3:]
+        global_positions = self.extract_glob_positions(animation)
+
+        pos = global_positions.reshape((len(global_positions), self.hierarchy.bone_count(), 3))
+        contacts = self.extract_feet_contacts(pos)
+
+        labels = self.extract_labels(root_vel, global_positions, bvh.filename)
+
+        for window_index in range(1, len(animation), window_step):  # skip first frame because root_vel is duplicate.
+            window_end_index = window_index + window_size
+            frames = animation[window_index: window_end_index]
             if len(frames) != window_size:
                 continue  # Skip samples with too few frames
 
-            root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, window_size)]
+            # Sample animation
+            s_root_vel = root_vel[window_index: window_end_index]
+            s_quats = quats[window_index: window_end_index]
+            s_glob_pos = global_positions[window_index: window_end_index]
+            s_contacts = contacts[window_index: window_end_index]
+            s_labels = labels[window_index:window_end_index]
 
-            # Frame info vector(s)
-            frames_copy = deepcopy(frames[1:])
-            quats = frames_copy[:, 3:]
+            # Sample offset vector(s)
+            offsets = np.array([frames[i] - frames[-1] for i in range(0, window_size)])
+            s_root_offsets = offsets[:, :3]
+            s_quat_offsets = offsets[:, 3:]
 
-            # Offset vector(s)
-            offsets = np.array([frames_copy[i] - frames_copy[-1] for i in range(0, window_size-1)])
-            root_offsets = offsets[:, :3]
-            quat_offsets = offsets[:, 3:]
-
-            # Target vector(s)
-            target_frame = frames_copy[-1, 3:]  # Note: This is quats only.
-
-            # Global joint positions (through FK)
-            fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]), window_size - 1, 0)
-            fk_pose = frames_copy  # concatenated (root_pos, joint_rots)
-            global_positions = np_forward_kinematics_batch(
-                offsets=fk_offsets,
-                pose=fk_pose,
-                parents=self.hierarchy.parent_ids,
-                joint_count=self.hierarchy.bone_count()
-            )
-
-            # Contact tensors
-            pos = global_positions.reshape((window_size-1, self.hierarchy.bone_count(), 3))
-            contacts = self.extract_feet_contacts(pos)
-            contacts = np.concatenate(contacts, axis=1)
-
-            # Frame labels
-            labels = self.extract_labels(root_vel, global_positions[:, :3])
+            # Sample target vector(s)
+            s_target_frame = frames[-1, 3:]  # Note: This is quats only.
 
             processed_data.append(np.array([
-                root_vel,
-                quats,
-                root_offsets,
-                quat_offsets,
-                target_frame,
-                global_positions,
-                contacts,
-                labels
+                s_root_vel,
+                s_quats,
+                s_root_offsets,
+                s_quat_offsets,
+                s_target_frame,
+                s_glob_pos,
+                s_contacts,
+                s_labels
             ], dtype=object))
         return np.array(processed_data)
 
-    def extract_feet_contacts(self, pos):
+    def extract_root_velocities(self, frames) -> np.ndarray:
+        root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, len(frames))]
+
+        # Duplicate first frame for shape consistency
+        root_vel = np.insert(root_vel, 0, root_vel[0], axis=0)
+        return root_vel
+
+    def extract_glob_positions(self, frames) -> np.ndarray:
+        fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]),
+                               len(frames), 0)
+        fk_pose = frames  # concatenated (root_pos, joint_rots)
+        global_positions = np_forward_kinematics_batch(
+            offsets=fk_offsets,
+            pose=fk_pose,
+            parents=self.hierarchy.parent_ids,
+            joint_count=self.hierarchy.bone_count()
+        )
+
+        return global_positions
+
+    def extract_feet_contacts(self, pos) -> np.ndarray:
         """
         Extracts binary tensors of feet contacts
 
@@ -228,21 +240,67 @@ class ETNDataset(IterableDataset):
         # Duplicate the last frame for shape consistency. Offset shouldn't be a problem because velocities are averages
         contacts_l = np.concatenate([contacts_l, contacts_l[-1:]], axis=0)
         contacts_r = np.concatenate([contacts_r, contacts_r[-1:]], axis=0)
+        contacts = np.concatenate((contacts_l, contacts_r), axis=1)
 
-        return np.asarray(contacts_l), np.asarray(contacts_r)
+        return np.asarray(contacts)
 
-    def extract_labels(self, root_vel, root_pos):
-        # TODO: actual labeling.
-        # If root joint velocity is less than threshold, then label = idle, else label = moving
-        # vel_thresh = 0.02  # EXAMPLE
-        # height_thresh = 2  # EXAMPLE
-        # moving_labels = [1 if vel > vel_thresh else 0 for vel in root_vel]  # EXAMPLE
-        #
-        # # If root joint position (height) lower than threshold, then label = crouching
-        # standing_labels = [1 if pos > height_thresh else 0 for pos in root_pos]  # EXAMPLE
-        # labels = np.concatenate(moving_labels, standing_labels, axis=1)
+    def extract_labels(self, root_vel, glob_pos, filename) -> np.ndarray:
+        # ALL THRESHOLDS EXPECT SUBSAMPLE FACTOR OF 4. TODO: DO LABELING BEFORE SUBSAMPLE?
 
-        return np.tile([0, 1, 0, 1], (len(root_vel), 1))  # placeholder
+        # Extracts label tensors for every frame in the sample. Labeling is based on heuristics and is very unlikely to
+        #  work for other datasets.
+
+        n_labels = 5
+
+        # when is hip considered moving
+        max_vel_idle = 0.2
+
+        # locomotion thresholds
+        max_vel_walk = 0.5
+        max_vel_run = 0.5
+
+        bvh_type = filename.split('_')[0]
+        bvh_type = ''.join([i for i in bvh_type if not i.isdigit()])
+
+        crawl_height_thresh = 30
+
+        # get foot velocities
+        lheel_idx = self.lfoot_idx[0]
+        rheel_idx = self.rfoot_idx[0]
+        lheel_xyz = (glob_pos[1:, lheel_idx*3: lheel_idx*3+3] - glob_pos[:-1, lheel_idx*3 : lheel_idx*3+3]) ** 2
+        rheel_xyz = (glob_pos[1:, rheel_idx*3: rheel_idx*3+3] - glob_pos[:-1, rheel_idx*3 : rheel_idx*3+3]) ** 2
+        lheel_xyz = np.concatenate([lheel_xyz, lheel_xyz[-1:]], axis=0)
+        rheel_xyz = np.concatenate([rheel_xyz, rheel_xyz[-1:]], axis=0)
+
+        labels = np.ndarray(shape=(len(root_vel), n_labels))
+        for idx in range(0, len(root_vel)):
+            root_vel_sq = root_vel[idx] ** 2
+
+            ground_vel = np.sqrt(np.sum(root_vel_sq))
+            lvel = np.sqrt(np.sum(lheel_xyz[idx]))
+            rvel = np.sqrt(np.sum(rheel_xyz[idx]))
+            feetVel = lvel + rvel
+
+            #Get foot velocities
+
+            # IDLE LABEL
+            isIdle = ground_vel < max_vel_idle
+
+            # CRAWL LABEL
+            neck_joint_idx = self.hierarchy.bone_names.index("Neck")
+            dist_hip_neck = glob_pos[idx][neck_joint_idx*3:neck_joint_idx*3+3] - glob_pos[idx][0:3]
+            isCrawling = abs(dist_hip_neck[1]) < crawl_height_thresh  # y-component distance between hip->neck joints.
+
+            # LOCOMOTION LABELS
+            isWalking = not isCrawling and (max_vel_idle <= ground_vel < max_vel_walk)
+            isRunning = not isCrawling and (max_vel_walk <= ground_vel < max_vel_run)
+            isSprinting = not isCrawling and (max_vel_run <= ground_vel)
+
+
+            lab = [lvel, rvel, feetVel, 0, ground_vel]
+            labels[idx] = lab
+
+        return labels
 
     def get_filename_by_index(self, idx) -> str:
         """
@@ -271,3 +329,10 @@ class ETNDataset(IterableDataset):
                 end_idx = int(file[2])
 
         return start_idx, end_idx
+
+    def vector_magn(self, vec) -> float:
+        sum = 0
+        for e in vec:
+            sum += e ** 2
+
+        return np.sqrt(sum)

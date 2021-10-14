@@ -1,6 +1,7 @@
 from bvh import Bvh
 import numpy as np
 import transformations as transform
+import os
 
 
 class BVHAnimation:
@@ -8,6 +9,7 @@ class BVHAnimation:
     def __init__(self, bvh_path):
         with open(bvh_path) as f:
             mocap = Bvh(f.read())
+            self.filename = os.path.basename(bvh_path)
 
         self.joints_names = mocap.get_joints_names()
         self.n_joints = len(self.joints_names)

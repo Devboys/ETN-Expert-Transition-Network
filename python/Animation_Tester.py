@@ -1,8 +1,8 @@
 import pathlib
+import numpy as np
 
 from etn_dataset import ETNDataset
 from utils_print import *
-import numpy as np
 
 
 def run():
@@ -18,7 +18,7 @@ class SampleExplorer:
     def __init__(self, sample_size, anim_dataset: ETNDataset):
         self.sample_size: int = sample_size
         self.data = anim_dataset
-        self.mode = PlaybackMode.FRAME
+        self.mode = PlaybackMode.SEQUENCE
         self.running = True
         self.rig_name = "original"
         self.sample_idx = 0  # handles global sample index
@@ -62,6 +62,7 @@ class SampleExplorer:
                 self.wrap_idx()
 
                 sample = self.data.animations[self.sample_idx]
+
                 self.print_sample(sample)
 
             elif key == "STOP":  # Stop playback and close program
@@ -72,6 +73,9 @@ class SampleExplorer:
                     self.mode = PlaybackMode.FRAME
                 elif args[0] == "SEQ":
                     self.mode = PlaybackMode.SEQUENCE
+
+            elif key == "FRAME":
+                self.frame_idx = int(args[0])
 
             else:
                 print("ERROR: could not parse message. Try again.\n")
@@ -110,32 +114,39 @@ class SampleExplorer:
             for i in range(0, len(quats)):
                 print_frame(root_pos[i], quats[i], self.rig_name, self.separator)
                 self.print_positions(glob_positions[i], self.rig_name)
-                self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i], self.rig_name)
+                self.print_frame_debug(self.sample_idx, i, contacts[i], labels[i], self.rig_name, root_pos[i], root_vel[i])
                 print("E")
 
         elif self.mode == PlaybackMode.FRAME:
             idx = self.frame_idx
             print_frame(root_pos[idx], quats[idx], self.rig_name, self.separator)
             self.print_positions(glob_positions[idx], self.rig_name)
-            self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx], self.rig_name)
+            self.print_frame_debug(self.sample_idx, idx, contacts[idx], labels[idx], self.rig_name, root_pos[idx], root_vel[idx])
 
-    def print_frame_debug(self, sample_idx, frame_idx, contacts, labels, rig_name: str):
+    def print_frame_debug(self, sample_idx, frame_idx, contacts, labels, rig_name: str, root_pos, root_vel):
 
-        debug_string = f"A {rig_name} "  # Marker must always be first element
+        debug_string = f"A {rig_name} {frame_idx} "  # Marker must always be first element
+        filename = self.data.get_filename_by_index(self.sample_idx)
+        debug_string += f"Filename={filename}" + self.separator
+        debug_string += f"Indices={self.data.get_index_of_filename(filename)[0]}-{self.data.get_index_of_filename(filename)[1]}" + self.separator
         debug_string += f"Sample-index={sample_idx}/{self.total_samples-1}" + self.separator
         debug_string += f"Frame-index={frame_idx}/{self.sample_length-1}" + self.separator
-        debug_string += f"Filename={self.data.get_filename_by_index(self.sample_idx)}" + self.separator
         debug_string += f"---------------" + self.separator
         debug_string += f"Contacts=[{','.join(['1' if x else '0' for x in contacts])}]" + self.separator
-        debug_string += f"Labels=[{','.join(['1' if x else '0' for x in labels])}]"
+        vel_magn = np.sqrt(root_vel[0] ** 2 + root_vel[2] ** 2)
+        debug_string += f"Root_vel={vel_magn}" + self.separator
+        debug_string += f"Labels=[{self.separator + self.list_to_string(labels, self.separator)}]"
 
         print(debug_string)
+
+    def list_to_string(self, list, sep:str) -> str:
+        outstr = f"{sep.join(str(e) for e in list)}"
+        return outstr
 
     def print_positions(self, glob_positions, rig_name:str):
         frame_string = f"G {rig_name} "  # frame marker + rig identifier
         frame_string += self.separator.join([str(j) for j in glob_positions])  # quats
 
         print(frame_string)
-
 
 run()  # Encapsulate run behaviour to prevent globals
