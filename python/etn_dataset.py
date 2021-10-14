@@ -1,5 +1,4 @@
 from torch.utils.data.dataset import IterableDataset
-from copy import deepcopy
 import numpy as np
 import os
 import glob
@@ -44,7 +43,6 @@ class ETNDataset(IterableDataset):
          :param data_dir: Path to the directory containing the bvh files to read. Should NOT end with a '/'.
          :param train_data: *Optional* A dataset to extract normalization-parameters from. If None, norm-params will be
          calculated from this dataset. Use this when you want to synchronize normalization over multiple datasets.
-         :param subsample_factor: The granularity factor, i.e. how much to subsample the dataset when generating
          samples.
         """
 
@@ -150,22 +148,25 @@ class ETNDataset(IterableDataset):
 
         # Define some basic vars
         window_size = past_length + transition_length + 1  # TODO: make this one and remove -1 on all s_vars
-
-        processed_data = list()
-
+        samples = list()
         subsample_factor = 4
+        n_edge = 2  # num edge frames
+
         animation = bvh.as_local_quaternions(subsample_factor)
 
         root_vel = self.extract_root_velocities(animation)
+        animation = animation[1:]  # skip first frame because root_vel cant be calculated
+
         quats = animation[:, 3:]
+
         global_positions = self.extract_glob_positions(animation)
 
         pos = global_positions.reshape((len(global_positions), self.hierarchy.bone_count(), 3))
         contacts = self.extract_feet_contacts(pos)
 
-        labels = self.extract_labels(root_vel, global_positions, bvh.filename)
+        labels = self.extract_labels(root_vel, pos, contacts, n_edge)
 
-        for window_index in range(1, len(animation), window_step):  # skip first frame because root_vel is duplicate.
+        for window_index in range(n_edge, len(animation)-n_edge, window_step):
             window_end_index = window_index + window_size
             frames = animation[window_index: window_end_index]
             if len(frames) != window_size:
@@ -186,7 +187,7 @@ class ETNDataset(IterableDataset):
             # Sample target vector(s)
             s_target_frame = frames[-1, 3:]  # Note: This is quats only.
 
-            processed_data.append(np.array([
+            samples.append(np.array([
                 s_root_vel,
                 s_quats,
                 s_root_offsets,
@@ -196,14 +197,11 @@ class ETNDataset(IterableDataset):
                 s_contacts,
                 s_labels
             ], dtype=object))
-        return np.array(processed_data)
+        return np.array(samples)
 
     def extract_root_velocities(self, frames) -> np.ndarray:
         root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, len(frames))]
-
-        # Duplicate first frame for shape consistency
-        root_vel = np.insert(root_vel, 0, root_vel[0], axis=0)
-        return root_vel
+        return np.asarray(root_vel)
 
     def extract_glob_positions(self, frames) -> np.ndarray:
         fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]),
@@ -223,9 +221,6 @@ class ETNDataset(IterableDataset):
         Extracts binary tensors of feet contacts
 
         :param pos: tensor of global joint positions of shape [n_frames, n_joints, 3]
-        :param lfoot_idx: hierarchy indices of left foot joints (heel_idx, toe_idx)
-        :param rfoot_idx: hierarchy indices of right foot joints (heel_idx, toe_idx)
-        :param vel_threshold: velocity threshold to consider a joint moving or not.
         :return: binary tensors of (left foot contacts, right foot contacts) pr frame. Last frame is duplicated once.
         """
 
@@ -244,60 +239,76 @@ class ETNDataset(IterableDataset):
 
         return np.asarray(contacts)
 
-    def extract_labels(self, root_vel, glob_pos, filename) -> np.ndarray:
+    def extract_labels(self, root_vel, glob_pos, contacts, n_edge) -> np.ndarray:
         # ALL THRESHOLDS EXPECT SUBSAMPLE FACTOR OF 4. TODO: DO LABELING BEFORE SUBSAMPLE?
 
         # Extracts label tensors for every frame in the sample. Labeling is based on heuristics and is very unlikely to
         #  work for other datasets.
 
-        n_labels = 5
+        n_labels = 4
 
         # when is hip considered moving
-        max_vel_idle = 0.2
+        max_idle_vel_standing = 4
+        max_idle_vel_crouching = 2
 
         # locomotion thresholds
-        max_vel_walk = 0.5
-        max_vel_run = 0.5
-
-        bvh_type = filename.split('_')[0]
-        bvh_type = ''.join([i for i in bvh_type if not i.isdigit()])
+        max_vel_walk = 43
+        # max_vel_run = 128
 
         crawl_height_thresh = 30
 
-        # get foot velocities
-        lheel_idx = self.lfoot_idx[0]
-        rheel_idx = self.rfoot_idx[0]
-        lheel_xyz = (glob_pos[1:, lheel_idx*3: lheel_idx*3+3] - glob_pos[:-1, lheel_idx*3 : lheel_idx*3+3]) ** 2
-        rheel_xyz = (glob_pos[1:, rheel_idx*3: rheel_idx*3+3] - glob_pos[:-1, rheel_idx*3 : rheel_idx*3+3]) ** 2
-        lheel_xyz = np.concatenate([lheel_xyz, lheel_xyz[-1:]], axis=0)
-        rheel_xyz = np.concatenate([rheel_xyz, rheel_xyz[-1:]], axis=0)
+        # get feet velocity (sum of heel velocities)
+        lheel_xyz = (glob_pos[1:, self.lfoot_idx[0], :] - glob_pos[:-1, self.lfoot_idx[0], :]) ** 2
+        rheel_xyz = (glob_pos[1:, self.rfoot_idx[0], :] - glob_pos[:-1, self.rfoot_idx[0], :]) ** 2
+        feet_vel = np.sqrt(np.sum(rheel_xyz, axis=1)) + np.sqrt(np.sum(lheel_xyz, axis=1))
+        feet_vel = np.concatenate([feet_vel, feet_vel[-1:]], axis=0)  # duplicate last entry for shape consistency.
+
+        # get root velocity
+        root_xyz = root_vel ** 2
+        ground_vel = np.sqrt(root_xyz[:, 0] + root_xyz[:, 2])
 
         labels = np.ndarray(shape=(len(root_vel), n_labels))
-        for idx in range(0, len(root_vel)):
-            root_vel_sq = root_vel[idx] ** 2
-
-            ground_vel = np.sqrt(np.sum(root_vel_sq))
-            lvel = np.sqrt(np.sum(lheel_xyz[idx]))
-            rvel = np.sqrt(np.sum(rheel_xyz[idx]))
-            feetVel = lvel + rvel
-
-            #Get foot velocities
-
-            # IDLE LABEL
-            isIdle = ground_vel < max_vel_idle
-
+        for idx in range(n_edge, len(root_vel)-n_edge):
             # CRAWL LABEL
             neck_joint_idx = self.hierarchy.bone_names.index("Neck")
-            dist_hip_neck = glob_pos[idx][neck_joint_idx*3:neck_joint_idx*3+3] - glob_pos[idx][0:3]
-            isCrawling = abs(dist_hip_neck[1]) < crawl_height_thresh  # y-component distance between hip->neck joints.
+            dist_hip_neck = glob_pos[idx][neck_joint_idx] - glob_pos[idx][0]
+            is_crawling = abs(dist_hip_neck[1]) < crawl_height_thresh  # y-component distance between hip->neck joints.
+
+            max_mean_vel_idle = max_idle_vel_crouching if is_crawling else max_idle_vel_standing
+
+            # IDLE LABEL
+            # Is idle when average root velocity within n_edge of current frame is less than threshold
+            mean_ground_vel = np.mean(ground_vel[idx - n_edge: idx + n_edge + 1])
+            is_idle = mean_ground_vel < max_mean_vel_idle
 
             # LOCOMOTION LABELS
-            isWalking = not isCrawling and (max_vel_idle <= ground_vel < max_vel_walk)
-            isRunning = not isCrawling and (max_vel_walk <= ground_vel < max_vel_run)
-            isSprinting = not isCrawling and (max_vel_run <= ground_vel)
+            # Is walking when no frames within n_edge of current frame has no contact with ground
+            contacts_window = contacts[idx - n_edge: idx + n_edge + 1]
+            contacts_ = [any(c for c in e) for e in contacts_window]
+            is_walking = all(c == 1 for c in contacts_)
+            is_walking = is_walking and not is_idle
+            # Is running vs sprinting when not walking and any foot velocitys exceed given thresholds within n_edge
+            #   of current frame.
+            is_running = is_sprinting = False
 
+            if not is_walking:
+                feet_vel_window = feet_vel[idx - n_edge: idx + n_edge + 1]
+                r = any(max_vel_walk < v for v in feet_vel_window)
+                # s = any(max_vel_run < v for v in feet_vel_window)
+                # if s:
+                #     is_sprinting = True
+                if r:
+                    is_running = True
 
-            lab = [lvel, rvel, feetVel, 0, ground_vel]
+            if is_crawling:  # exclusive
+                is_running = is_walking = False
+
+            lab = [is_idle, is_walking, is_running, is_crawling]
+            if all(e == 0 for e in lab):  # if no label, then idle default
+                # TODO: consider an 'unlabeled' label and possibly an outlier-removal method.
+                lab = [0]*n_labels
+                lab[0] = True
+
             labels[idx] = lab
 
         return labels
@@ -331,8 +342,8 @@ class ETNDataset(IterableDataset):
         return start_idx, end_idx
 
     def vector_magn(self, vec) -> float:
-        sum = 0
+        _sum = 0
         for e in vec:
-            sum += e ** 2
+            _sum += e ** 2
 
-        return np.sqrt(sum)
+        return np.sqrt(_sum)
