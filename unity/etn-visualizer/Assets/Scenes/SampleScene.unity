@@ -245,7 +245,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &213263411
 RectTransform:
   m_ObjectHideFlags: 0
@@ -263,7 +263,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -1196, y: 376}
+  m_AnchoredPosition: {x: -150, y: 411}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &213263412
@@ -1227,7 +1227,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   framerate: 10
-  lockRootPos: 0
+  lockRootPos: 1
   jointTemplate: {fileID: 8999095260897232072, guid: cde983e132770c04883d4b0f1b9e555f,
     type: 3}
   playContinuous: 0
@@ -2477,7 +2477,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5a84ec61b234caf41914c597ea377adb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _scriptPath: E:\Projects\ETN-Expert-Transition-Network\python\Animation_Tester.py
+  _scriptPath: E:\Projects\ETN-Expert-Transition-Network\python\main.py
   _pythonInterpreterPath: E:\Projects\ETN-Expert-Transition-Network\python\.venv\Scripts\python.exe
   _arguments: 
   _processStatus: 0
@@ -2545,14 +2545,14 @@ RectTransform:
   m_GameObject: {fileID: 1705896409}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 2.5446, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 2011436403}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -290.0714, y: -85.88947}
+  m_AnchoredPosition: {x: 11, y: -85.88947}
   m_SizeDelta: {x: 509.2502, y: 509.5338}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1705896411
@@ -5195,7 +5195,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 1000, y: 0}
+  m_AnchoredPosition: {x: 1000, y: 249}
   m_SizeDelta: {x: 72, y: 72}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!224 &2011486785
@@ -5613,7 +5613,7 @@ PrefabInstance:
     - target: {fileID: -4216859302048453862, guid: 22e90e7bf86a78e4eac9f7a05071a793,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -4292
+      value: -4719
       objectReference: {fileID: 0}
     - target: {fileID: -4216859302048453862, guid: 22e90e7bf86a78e4eac9f7a05071a793,
         type: 3}
@@ -5668,12 +5668,27 @@ PrefabInstance:
     - target: {fileID: -927199367670048503, guid: 22e90e7bf86a78e4eac9f7a05071a793,
         type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2289599964352737020, guid: 22e90e7bf86a78e4eac9f7a05071a793,
         type: 3}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3779134592073529279, guid: 22e90e7bf86a78e4eac9f7a05071a793,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3779134592073529279, guid: 22e90e7bf86a78e4eac9f7a05071a793,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3779134592073529279, guid: 22e90e7bf86a78e4eac9f7a05071a793,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3779134592073529279, guid: 22e90e7bf86a78e4eac9f7a05071a793,
         type: 3}

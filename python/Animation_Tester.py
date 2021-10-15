@@ -8,7 +8,7 @@ from utils_print import *
 def run():
     # load dataset
     project_dir = str(pathlib.Path(__file__).parent.parent.absolute())
-    data_path = f"{project_dir}/data/lafan1_single/train"
+    data_path = f"{project_dir}/data/lafan1_reduced/train"
     data = ETNDataset(data_path, window_step=41)
     player = SampleExplorer(sample_size=32, anim_dataset=data)
     player.play()

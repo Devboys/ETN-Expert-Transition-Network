@@ -91,14 +91,15 @@ class ETNDataset(IterableDataset):
 
             self.animations = np.concatenate(anims)
 
-            # np.savez_compressed( # TODO: REVERT
-            #     cache_path,
-            #     animations=self.animations,
-            #     bone_offsets=self.hierarchy.bone_offsets,
-            #     bone_names=self.hierarchy.bone_names,
-            #     parent_ids=self.hierarchy.parent_ids,
-            #     file_indices=self.file_indices
-            # )
+            # Cache data
+            np.savez_compressed(
+                cache_path,
+                animations=self.animations,
+                bone_offsets=self.hierarchy.bone_offsets,
+                bone_names=self.hierarchy.bone_names,
+                parent_ids=self.hierarchy.parent_ids,
+                file_indices=self.file_indices
+            )
 
         # Resolve norm-params
         if train_data is None:
@@ -123,7 +124,7 @@ class ETNDataset(IterableDataset):
                 ground_truth = np.concatenate([root, quats], axis=1)
 
                 # TODO: Add labels as output of iterator and include in generator code
-                yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts
+                yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts, labels
 
     def to_etn_input(self, bvh: BVHAnimation, past_length: int = 10, transition_length: int = 30, window_step: int = 15) -> np.ndarray:
         """

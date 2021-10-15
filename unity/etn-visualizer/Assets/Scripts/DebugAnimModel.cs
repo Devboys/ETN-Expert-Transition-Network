@@ -43,6 +43,10 @@ public class DebugAnimModel : MonoBehaviour
         {
             playContinuous = !playContinuous;
         }
+        if (Input.GetKeyDown(KeyCode.Keypad8))
+        {
+            lockRootPos = !lockRootPos;
+        }
 
         if (timer > 0)
         {
@@ -60,7 +64,7 @@ public class DebugAnimModel : MonoBehaviour
             }
             catch (Exception e)
             {
-                Debug.LogWarning("Something went wrong with: " + PythonLauncher.instance.data[0] + "\n" + e.Message + "\n" + e.StackTrace);
+                Debug.LogWarning("Something went wrong with: \"" + PythonLauncher.instance.data[0] + "\"\n" + e.Message + "\n" + e.StackTrace);
                 PythonLauncher.instance.data.RemoveAt(0);
                 throw e;
             }

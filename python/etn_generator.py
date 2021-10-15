@@ -294,7 +294,7 @@ class ETNGenerator(nn.Module):
         """
         self.eval()  # Flag network for eval mode
         root, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
-            contacts = [b.float().to(self.device) for b in batch]
+            contacts, labels = [b.float().to(self.device) for b in batch]
         with t.no_grad():
             pred_quats, out_contacts = self.__forward(
                 root_in=root[:, :10],
@@ -374,7 +374,7 @@ class ETNGenerator(nn.Module):
 
             # Extract batch info
             root, quats, root_offsets, quat_offsets, target_quats, ground_truth, \
-                global_positions, contacts = [b.float().to(self.device) for b in next(data_iter)]
+                global_positions, contacts, labels = [b.float().to(self.device) for b in next(data_iter)]
 
             # Generate sequence
             poses, c = self.__forward(
@@ -389,7 +389,7 @@ class ETNGenerator(nn.Module):
             glob_poses = self.__fk(poses)
 
             # Calculate loss
-            loss = self.__loss(poses, ground_truth[:, 10:-1], c, contacts[:, 10:-1], glob_poses, global_positions[:, 10:-1]) # skipping last (target) frames
+            loss = self.__loss(poses, ground_truth[:, 10:-1], c, contacts[:, 10:-1], glob_poses, global_positions[:, 10:-1])  # skipping last (target) frames
             assert t.isfinite(loss), f"loss is not finite: {loss}"
 
             # Backpropagate and optimize
