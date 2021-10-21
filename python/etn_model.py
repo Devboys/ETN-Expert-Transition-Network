@@ -74,9 +74,19 @@ class ETNModel(nn.Module):
                 target_quats=target_quats,
                 target_root_pos=root_offsets[:, 0]
             )
-            glob_poses = self.__fk(pred_poses)
+            pred_poses_glob = self.fk(pred_poses)
 
             # Calculate loss and backpropagate
+            loss = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
+                               global_positions[:, 10:-1])  # skipping last (target) frames
+            assert torch.isfinite(loss), f"loss is not finite: {loss}"
+
+            # Backpropagate and optimize
+            loss.backward()  # Calculate gradients
+            self.optimizer.step()  # Gradient descent
+            self.optimizer.zero_grad()  # Reset stored gradient values
+            train_writer.add_scalar("loss/loss", loss.item(), self.epoch_idx)  # Log loss
+            pbar.set_description(f"Training generator. Loss {loss}")  # Update progress bar
 
             # Validate
             if self.epoch_idx % val_freq == 0:
@@ -203,7 +213,7 @@ class ETNModel(nn.Module):
                 target_quats=target_quats,
                 target_root_pos=-root_offsets[:, 0]
             )
-            pred_pos = self.__fk(pred_poses)
+            pred_positions = self.fk(pred_poses)
 
             # Calculate loss
             loss = self.__loss(
@@ -211,14 +221,14 @@ class ETNModel(nn.Module):
                 gt_frames=ground_truth[:, 10:-1],  # skip last (target) frame
                 contacts=pred_contacts,
                 gt_contacts=contacts[:, 10:-1],  # skip last (target) frame
-                positions=pred_pos,
+                positions=pred_positions,
                 gt_positions=global_positions[:, 10:-1]  # skip last (target) frame
             )
 
             # Report loss
             writer.add_scalar("loss/loss", loss.item(), self.epoch_idx)
 
-    def __fk(self, frames):
+    def fk(self, frames):
         """
         Performs FK calculations on the given pose using the stored generators hierarchy.
 
@@ -280,3 +290,5 @@ class ETNModel(nn.Module):
         self.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.batch_idx = checkpoint["batch_idx"]
+
+

@@ -40,7 +40,6 @@ def run(base_dir, is_param_optimizing: bool):
     val_data = ETNDataset(val_dir, train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=minibatch_size)
 
-    # model = ETNGenerator( hierarchy=val_data.hierarchy, learning_rate=learning_rate)
     model = ETNModel(hierarchy=val_data.hierarchy, learning_rate=learning_rate, name=model_name)
 
     if Path(model_path).exists():
@@ -48,16 +47,37 @@ def run(base_dir, is_param_optimizing: bool):
         model.load(model_path)
         print(f"Loaded model: {model_path}")
 
-        # Get generated transition
+        # Get next batch and extract
         batch = next(iter(val_loader))
-        pred_pos, pred_quats, pred_contacts = model.eval_batch(batch)
+        batch = [b.float().to(model.device) for b in batch]  # Convert to float values for concat
+        root = batch[0]
+        quats = batch[1]
+        root_offsets = batch[2]
+        quat_offsets = batch[3]
+        target_quats = batch[4]
+        ground_truth = batch[5]
+        global_positions = batch[6]
+        contacts = batch[7]
+        labels = batch[8]
+
+        # Predict transition
+        pred_poses, pred_contacts = model.forward(
+            past_root=root[:, :10],
+            past_quats=quats[:, :10],
+            past_root_offset=root_offsets[:, :10],
+            past_quat_offset=quat_offsets[:, :10],
+            past_contacts=contacts[:, :10],
+            target_quats=target_quats,
+            target_root_pos=-root_offsets[:, 0]
+        )
+        pred_pos = model.fk(pred_poses)
 
         # Parse 'original' data aka batch. Used for comparison
         root, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
             contacts, labels = [b.float().to(model.device) for b in batch]
 
         org_quats, pred_quats, org_pos, pred_pos, org_contacts, pred_contacts = utils_print.process_sample_pair(quats,
-                                                                                                    pred_quats,
+                                                                                                    pred_poses,
                                                                                                     global_positions,
                                                                                                     pred_pos,
                                                                                                     contacts,
@@ -76,9 +96,8 @@ def run(base_dir, is_param_optimizing: bool):
         sp = SamplePrinter(org_name, pred_name, separator, len(org_quats), len(org_quats[0]))
         sp.start_print_loop(org_samples, pred_samples, labels)
     else:
-        # model.do_train(train_loader, model_id, tensorboard_dir, n_epochs, val_loader)
         model.do_train(train_loader, val_loader, n_epochs, 10, tensorboard_dir)
-        # model.save(model_path)
+        model.save(model_path)
 
 
 run(sys.path[0], False)  # Encapsulate run behaviour to prevent globals
