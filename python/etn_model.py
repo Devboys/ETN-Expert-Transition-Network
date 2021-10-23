@@ -72,13 +72,17 @@ class ETNModel(nn.Module):
                 past_quat_offset=quat_offsets[:, :10],
                 past_contacts=contacts[:, :10],
                 target_quats=target_quats,
-                target_root_pos=root_offsets[:, 0]
+                target_root_pos=root_offsets[:, 0],
+                init_root_pos=global_positions[:, 0, :3]
             )
-            pred_poses_glob = self.fk(pred_poses)
+            # To root-relative
+            pred_poses_glob = self.fk(pred_poses)[:, :, 3:]
+            rrrr = global_positions[:, 10:-1, 3:]
+
 
             # Calculate loss and backpropagate
-            loss = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
-                               global_positions[:, 10:-1])  # skipping last (target) frames
+            loss, l_quat, l_contact, l_pos = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
+                               rrrr)  # skipping last (target) frames
             assert torch.isfinite(loss), f"loss is not finite: {loss}"
 
             # Backpropagate and optimize
@@ -86,7 +90,7 @@ class ETNModel(nn.Module):
             self.optimizer.step()  # Gradient descent
             self.optimizer.zero_grad()  # Reset stored gradient values
             train_writer.add_scalar("loss/loss", loss.item(), self.epoch_idx)  # Log loss
-            pbar.set_description(f"Training generator. Loss {loss}")  # Update progress bar
+            pbar.set_description(f"Training generator. Loss {loss}, l_pos={l_pos}, l_quat={l_quat}, l_contact={l_contact}")  # Update progress bar
 
             # Validate
             if self.epoch_idx % val_freq == 0:
@@ -100,13 +104,14 @@ class ETNModel(nn.Module):
                 past_quat_offset: torch.Tensor,
                 past_contacts: torch.Tensor,
                 target_root_pos: torch.Tensor,
-                target_quats: torch.Tensor
-              ):  # TODO: rename to forward (to support hooks)
+                target_quats: torch.Tensor,
+                init_root_pos: torch.Tensor
+                ):
 
         lstm_state = None  # TODO: hidden state initializer here
         pred_poses = list()
         pred_contacts = list()
-        glob_root = None
+        glob_root = init_root_pos
 
         # Declaring vars to be assigned in for-loop to prevent compiler warnings
         next_rvel = None
@@ -211,12 +216,13 @@ class ETNModel(nn.Module):
                 past_quat_offset=quat_offsets[:, :10],
                 past_contacts=contacts[:, :10],
                 target_quats=target_quats,
-                target_root_pos=-root_offsets[:, 0]
+                target_root_pos=-root_offsets[:, 0],
+                init_root_pos=global_positions[:, 0, :3]
             )
             pred_positions = self.fk(pred_poses)
 
             # Calculate loss
-            loss = self.__loss(
+            loss, l_quat, l_contact, l_pos = self.__loss(
                 frames=pred_poses,
                 gt_frames=ground_truth[:, 10:-1],  # skip last (target) frame
                 contacts=pred_contacts,
@@ -263,11 +269,12 @@ class ETNModel(nn.Module):
         :return: Accumulated loss of the entire transition
         """
         mae = lambda x, y: torch.mean(torch.abs(y - x))  # Mean absolute error (MAE)
+        l_quat = mae(frames, gt_frames)
+        l_contact = mae(contacts, gt_contacts) * self.LOSS_MODIFIER_G
+        l_pos = mae(positions, gt_positions) * self.LOSS_MODIFIER_P
 
-        loss = mae(frames, gt_frames)
-        loss += mae(contacts, gt_contacts) * self.LOSS_MODIFIER_G
-        loss += mae(positions, gt_positions) * self.LOSS_MODIFIER_P
-        return loss
+        loss = l_quat + l_contact + l_pos
+        return loss, l_quat, l_contact, l_pos
 
     def save(self, filename):
         """

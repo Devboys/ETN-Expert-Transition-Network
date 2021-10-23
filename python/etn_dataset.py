@@ -118,13 +118,13 @@ class ETNDataset(IterableDataset):
         while True:
             n_animations = len(self.animations)
             for idx in random.sample(range(n_animations), n_animations):
-                root, quats, root_offsets, quat_offsets, target_frame, global_positions, contacts, \
+                root_vel, quats, root_offsets, quat_offsets, target_frame, global_positions, contacts, \
                     labels = self.animations[idx]
 
-                ground_truth = np.concatenate([root, quats], axis=1)
+                ground_truth = np.concatenate([root_vel, quats], axis=1)
 
                 # TODO: Add labels as output of iterator and include in generator code
-                yield root, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts, labels
+                yield root_vel, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts, labels
 
     def to_etn_input(self, bvh: BVHAnimation, past_length: int = 10, transition_length: int = 30, window_step: int = 15) -> np.ndarray:
         """
@@ -159,9 +159,7 @@ class ETNDataset(IterableDataset):
         animation = animation[1:]  # skip first frame because root_vel cant be calculated
 
         quats = animation[:, 3:]
-
         global_positions = self.extract_glob_positions(animation)
-
         pos = global_positions.reshape((len(global_positions), self.hierarchy.bone_count(), 3))
         contacts = self.extract_feet_contacts(pos)
 
@@ -180,12 +178,12 @@ class ETNDataset(IterableDataset):
             s_contacts = contacts[window_index: window_end_index]
             s_labels = labels[window_index:window_end_index]
 
-            # Sample offset vector(s)
+            # Get sample offset vectors
             offsets = np.array([frames[i] - frames[-1] for i in range(0, window_size)])
             s_root_offsets = offsets[:, :3]
             s_quat_offsets = offsets[:, 3:]
 
-            # Sample target vector(s)
+            # Get ample target vector(s)
             s_target_frame = frames[-1, 3:]  # Note: This is quats only.
 
             samples.append(np.array([

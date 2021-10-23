@@ -68,7 +68,8 @@ def run(base_dir, is_param_optimizing: bool):
             past_quat_offset=quat_offsets[:, :10],
             past_contacts=contacts[:, :10],
             target_quats=target_quats,
-            target_root_pos=-root_offsets[:, 0]
+            target_root_pos=-root_offsets[:, 0],
+            init_root_pos=global_positions[:, 0, :3]
         )
         pred_pos = model.fk(pred_poses)
 
@@ -97,7 +98,7 @@ def run(base_dir, is_param_optimizing: bool):
         sp.start_print_loop(org_samples, pred_samples, labels)
     else:
         model.do_train(train_loader, val_loader, n_epochs, 10, tensorboard_dir)
-        model.save(model_path)
+        # model.save(model_path)
 
 
 run(sys.path[0], False)  # Encapsulate run behaviour to prevent globals
