@@ -131,7 +131,7 @@ class ETNDataset(IterableDataset):
         Process a BVHAnimation and divide into samples of vectors of size (past_length + transition_length + 1).
             Each sample consists of a tuple of values for every frame:\n
             [0]=root joint velocity.\n
-            [1]=pr-joint quaternion roations.\n
+            [1]=pr-joint quaternion rotations.\n
             [2]=root joint offsets from target frame.\n
             [3]=pr-joint quaternion offset from target frame.\n
             [4]=pr-joint quaternion rotations of target frame.\n

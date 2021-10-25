@@ -66,7 +66,7 @@ class ETNModel(nn.Module):
 
             # Predict sequence
             pred_poses, pred_contacts = self.forward(
-                past_root=root[:, :10],
+                past_root_vel=root[:, :10],
                 past_quats=quats[:, :10],
                 past_root_offset=root_offsets[:, :10],
                 past_quat_offset=quat_offsets[:, :10],
@@ -76,13 +76,13 @@ class ETNModel(nn.Module):
                 init_root_pos=global_positions[:, 0, :3]
             )
             # To root-relative
-            pred_poses_glob = self.fk(pred_poses)[:, :, 3:]
-            rrrr = global_positions[:, 10:-1, 3:]
+            fk_pred_poses = pred_poses
+            pred_poses_glob = self.fk(fk_pred_poses)
 
 
             # Calculate loss and backpropagate
             loss, l_quat, l_contact, l_pos = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
-                               rrrr)  # skipping last (target) frames
+                               global_positions[:, 10:-1])  # skipping last (target) frames
             assert torch.isfinite(loss), f"loss is not finite: {loss}"
 
             # Backpropagate and optimize
@@ -98,7 +98,7 @@ class ETNModel(nn.Module):
             self.epoch_idx += 1
 
     def forward(self,
-                past_root: torch.Tensor,
+                past_root_vel: torch.Tensor,
                 past_quats: torch.Tensor,
                 past_root_offset: torch.Tensor,
                 past_quat_offset: torch.Tensor,
@@ -123,7 +123,7 @@ class ETNModel(nn.Module):
         # Initialize with past-context
         for past_idx in range(10):
             next_rvel, next_quats, next_contacts, lstm_state = self.__pred_pose(
-                root_vel=past_root[:, past_idx],
+                root_vel=past_root_vel[:, past_idx],
                 quats=past_quats[:, past_idx],
                 root_offset=past_root_offset[:, past_idx],
                 quat_offset=past_quat_offset[:, past_idx],
@@ -131,10 +131,7 @@ class ETNModel(nn.Module):
                 target_quats=target_quats,
                 prev_state=lstm_state
             )
-            if glob_root is None:
-                glob_root = next_rvel
-            else:
-                glob_root += next_rvel
+            glob_root += past_root_vel[:, past_idx]  # NOTE: MIGHT BE ONE FRAME OFF
             next_root_offset = glob_root - target_root_pos
             next_quat_offsets = next_quats - target_quats
 
@@ -210,7 +207,7 @@ class ETNModel(nn.Module):
         with torch.no_grad():  # Make no gradient calculations
             # Predict sequence
             pred_poses, pred_contacts = self.forward(
-                past_root=root[:, :10],
+                past_root_vel=root[:, :10],
                 past_quats=quats[:, :10],
                 past_root_offset=root_offsets[:, :10],
                 past_quat_offset=quat_offsets[:, :10],

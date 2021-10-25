@@ -62,7 +62,7 @@ def run(base_dir, is_param_optimizing: bool):
 
         # Predict transition
         pred_poses, pred_contacts = model.forward(
-            past_root=root[:, :10],
+            past_root_vel=root[:, :10],
             past_quats=quats[:, :10],
             past_root_offset=root_offsets[:, :10],
             past_quat_offset=quat_offsets[:, :10],

@@ -64,20 +64,29 @@ def np_forward_kinematics_batch(offsets, pose, parents, joint_count=22):
 
 def torch_forward_kinematics_batch(offsets, pose, parents, joint_count):
     """
-    Computes the global positions and rotations in global space of joints in a hierarchy.
+    Computes the global positions and rotations in global space of joints in a hierarchy. \n
     :param offsets: Batch of shape (batch_size, num_joints*3) of local offsets of each joint o
     :param pose: Batch of shape (batch_size, num_joints*4+3) of Vectors containing the root joint position and a joints' local quaternions
     :param parents: One-dimensional vector representing the mapping from a joint to its parent
     :param joint_count: The amount of joints in the hierarchy.
     :return: Returns a vector containing the final joint positions and quaternions.
     """
-    # Get children joints of specified joint
-    def get_children(joint_index): return [c for c in range(len(parents)) if c != joint_index and parents[c] == joint_index]
+    def get_children(joint_index) -> list:
+        """
+        Rerturns indices of all child-joints of the joint at given index.
+        :return: List of child indices.
+        """
+        return [c for c in range(len(parents)) if c != joint_index and parents[c] == joint_index]
+
     # Get conjugate of a quaternion (batch)
     def get_conjugate(q): return t.cat([q[:, 0:1], -q[:, 1:2], -q[:, 2:3], -q[:, 3:4]], dim=1)
 
-    # Custom quaternion-quaternion multiplication
     def mul(q, p):
+        """
+        Multiplies two quaternions \n
+        :param q: First quaternion
+        :param p: Second quaternion
+        """
         qv = q[:, 1:]  # (qx, qy, qz)
         pv = p[:, 1:]  # (px, py, pz)
         qw = q[:, :1]
