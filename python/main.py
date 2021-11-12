@@ -27,6 +27,8 @@ def run(base_dir, is_param_optimizing: bool):
 
     model_id = str(uuid.uuid4())[:8] if is_param_optimizing else "NaN"
 
+    rng = np.random.RandomState(23456)
+
     # HYPERPARAMS
     minibatch_size = 32
     n_epochs = 11  # i.e. training length
@@ -46,7 +48,7 @@ def run(base_dir, is_param_optimizing: bool):
     val_data = ETNDataset(val_dir, past_length=PST_LENGTH, transition_length=SEQ_LENGTH, train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=minibatch_size)
 
-    model = ETNModel(name=model_name, hierarchy=val_data.hierarchy, batch_size=minibatch_size, learning_rate=learning_rate, n_experts=n_experts, )
+    model = ETNModel(name=model_name, hierarchy=val_data.hierarchy, batch_size=minibatch_size, rng=rng, learning_rate=learning_rate, n_experts=n_experts, )
     print(f"Running on: {model.device}")
 
     if Path(model_path).exists():

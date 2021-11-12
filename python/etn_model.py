@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.random as rand
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -12,8 +13,9 @@ from expert_set import ExpertSet
 from etn_generator import ETNGenerator
 from etn_dataset import HierarchyDefinition
 
+
 class ETNModel(nn.Module):
-    def __init__(self, name, hierarchy: HierarchyDefinition, batch_size: int, learning_rate=1e-3, n_experts: int = 4):
+    def __init__(self, name, hierarchy: HierarchyDefinition, batch_size: int, rng: rand.RandomState, learning_rate=1e-3, n_experts: int = 4):
         super().__init__()
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -40,8 +42,8 @@ class ETNModel(nn.Module):
 
         # Generator expert weights
         gen_dims = self.generator.predictor.dims  # expert weights must match generator dimensions.
-        self.gen_l0 = ExpertSet((n_experts, gen_dims[1], gen_dims[0]), self.device)  # dims swapped because matmul
-        self.gen_l1 = ExpertSet((n_experts, gen_dims[2], gen_dims[1]), self.device)
+        self.gen_l0 = ExpertSet((n_experts, gen_dims[1], gen_dims[0]), self.device, rng)  # dims swapped because matmul
+        self.gen_l1 = ExpertSet((n_experts, gen_dims[2], gen_dims[1]), self.device, rng)
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
 
@@ -123,7 +125,7 @@ class ETNModel(nn.Module):
         batch = next(iter(loader))
         batch = [b.float().to(self.device) for b in batch]  # Convert to float values for concat
 
-        root = batch[0]
+        root_vel = batch[0]
         quats = batch[1]
         root_offsets = batch[2]
         quat_offsets = batch[3]
@@ -133,17 +135,33 @@ class ETNModel(nn.Module):
         contacts = batch[7]
         labels = batch[8]
 
-        with torch.no_grad():  # Make no gradient calculations
+        with torch.no_grad():   # Make no gradient calculations
             # Predict sequence
-            pred_poses, pred_contacts = self.forward(
-                past_root_vel=root[:, :10],
+
+            # Get blending coefficients through gating network
+            bc = self.gating.forward(root_vel, labels, contacts)
+
+            # Get blended parameters from experts
+            gen_w0 = self.gen_l0.get_weight_blend(bc, self.batch_size)
+            gen_b0 = self.gen_l0.get_bias_blend(bc, self.batch_size)
+
+            gen_w1 = self.gen_l1.get_weight_blend(bc, self.batch_size)
+            gen_b1 = self.gen_l1.get_bias_blend(bc, self.batch_size)
+
+            pred_weights = (gen_w0, gen_w1)
+            pred_bias = (gen_b0, gen_b1)
+
+            pred_poses, pred_contacts = self.generator.forward(
+                past_root_vel=root_vel[:, :10],
                 past_quats=quats[:, :10],
                 past_root_offset=root_offsets[:, :10],
                 past_quat_offset=quat_offsets[:, :10],
                 past_contacts=contacts[:, :10],
                 target_quats=target_quats,
                 target_root_pos=-root_offsets[:, 0],
-                init_root_pos=global_positions[:, 0, :3]
+                init_root_pos=global_positions[:, 0, :3],
+                pred_weights=pred_weights,
+                pred_bias=pred_bias
             )
             pred_positions = self.fk(pred_poses)
 
