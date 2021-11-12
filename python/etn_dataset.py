@@ -240,6 +240,7 @@ class ETNDataset(IterableDataset):
 
     def extract_labels(self, root_vel, glob_pos, contacts, n_edge) -> np.ndarray:
         # ALL THRESHOLDS EXPECT SUBSAMPLE FACTOR OF 4. TODO: DO LABELING BEFORE SUBSAMPLE?
+        # TODO: Clean up this mess
 
         # Extracts label tensors for every frame in the sample. Labeling is based on heuristics and is very unlikely to
         #  work for other datasets.

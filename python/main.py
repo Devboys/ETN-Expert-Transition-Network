@@ -12,6 +12,11 @@ from etn_dataset import ETNDataset
 from utils_print import *
 
 
+# Globals
+PST_LENGTH = 10
+SEQ_LENGTH = 30
+
+
 def run(base_dir, is_param_optimizing: bool):
     # PATHS
     basedir = str(pathlib.Path(__file__).parent.parent.absolute())
@@ -26,6 +31,7 @@ def run(base_dir, is_param_optimizing: bool):
     minibatch_size = 32
     n_epochs = 11  # i.e. training length
     learning_rate = 0.0005
+    n_experts = 4
 
     if is_param_optimizing:
         # for hyperparam optimization, learning rate is a random float between 0.0001 and 0.1
@@ -35,12 +41,13 @@ def run(base_dir, is_param_optimizing: bool):
     model_name = f"etn_{model_id}_bs{str(minibatch_size)}_ne{str(n_epochs)}_lr{str(learning_rate)}.pt"
     model_path = model_dir + model_name
 
-    train_data = ETNDataset(train_dir)
+    train_data = ETNDataset(train_dir, past_length=PST_LENGTH, transition_length=SEQ_LENGTH)
     train_loader = DataLoader(train_data, batch_size=minibatch_size)
-    val_data = ETNDataset(val_dir, train_data=train_data)
+    val_data = ETNDataset(val_dir, past_length=PST_LENGTH, transition_length=SEQ_LENGTH, train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=minibatch_size)
 
-    model = ETNModel(hierarchy=val_data.hierarchy, learning_rate=learning_rate, name=model_name)
+    model = ETNModel(name=model_name, hierarchy=val_data.hierarchy, batch_size=minibatch_size, learning_rate=learning_rate, n_experts=n_experts, )
+    print(f"Running on: {model.device}")
 
     if Path(model_path).exists():
         # Load model
@@ -101,5 +108,5 @@ def run(base_dir, is_param_optimizing: bool):
         # model.save(model_path)
 
 
-run(sys.path[0], False)  # Encapsulate run behaviour to prevent globals
+run(sys.path[0], False)  # Encapsulate run behaviour to prevent accidental globals
 

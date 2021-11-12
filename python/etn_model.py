@@ -8,38 +8,44 @@ import tqdm
 import utils_fk
 import utils_tensorboard
 from etn_gating import ETNGating
-from etn_experts import ETNExperts
+from expert_set import ExpertSet
 from etn_generator import ETNGenerator
 from etn_dataset import HierarchyDefinition
 
-
 class ETNModel(nn.Module):
-    def __init__(self, name, hierarchy: HierarchyDefinition, learning_rate=1e-3):
+    def __init__(self, name, hierarchy: HierarchyDefinition, batch_size: int, learning_rate=1e-3, n_experts: int = 4):
         super().__init__()
 
-        # Set values
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.name = name
+        self.batch_size = batch_size
 
+        # Loss Vars
+        self.LOSS_MODIFIER_G = 0.1
+        self.LOSS_MODIFIER_P = 0.5
+
+        # FK Vars
         self.bone_offsets = torch.from_numpy(np.tile(hierarchy.bone_offsets, (32, 1, 1))).float().to(
             self.device)  # Store separately as tensor
         self.parent_ids = torch.from_numpy(hierarchy.parent_ids).float().to(self.device)  # Store separately as tensor
         self.num_joints = hierarchy.bone_count()
 
-        self.generator = ETNGenerator(hierarchy) # Temp location for adam
-
-        self.epoch_idx = 0
-        self.optimizer = torch.optim.Adam(self.generator.parameters(), lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
-        self.to(self.device)
+        # Training vars
         self.batch_idx = 0
-        self.LOSS_MODIFIER_G = 0.1
-        self.LOSS_MODIFIER_P = 0.5
-
-        self.lr = learning_rate
+        self.epoch_idx = 0
 
         # Build Model
-        # self.gating = ETNGating()
-        # self.experts = ETNExperts()
+        self.gating = ETNGating(n_experts, self.device)
+        self.generator = ETNGenerator(hierarchy, self.device)
+
+        # Generator expert weights
+        gen_dims = self.generator.predictor.dims  # expert weights must match generator dimensions.
+        self.gen_l0 = ExpertSet((n_experts, gen_dims[1], gen_dims[0]), self.device)  # dims swapped because matmul
+        self.gen_l1 = ExpertSet((n_experts, gen_dims[2], gen_dims[1]), self.device)
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
+
+        self.to(self.device)
 
     def do_train(self, train_loader: DataLoader, val_loader: DataLoader, num_epochs: int, val_freq: int, tensorboard_dir: str):
 
@@ -53,27 +59,41 @@ class ETNModel(nn.Module):
             # Get batch data
             batch = next(train_iter)
             batch = [b.float().to(self.device) for b in batch]  # Convert to float values for concat
-
-            root = batch[0]
-            quats = batch[1]
+            root_vel     = batch[0]
+            quats        = batch[1]
             root_offsets = batch[2]
             quat_offsets = batch[3]
             target_quats = batch[4]
             ground_truth = batch[5]
-            global_positions = batch[6]
-            contacts = batch[7]
-            labels = batch[8]
+            glob_pos     = batch[6]
+            contacts     = batch[7]
+            labels       = batch[8]
+
+            # Get blending coefficients through gating network
+            bc = self.gating.forward(root_vel, labels, contacts)
+
+            # Get blended parameters from experts
+            gen_w0 = self.gen_l0.get_weight_blend(bc, self.batch_size)
+            gen_b0 = self.gen_l0.get_bias_blend(bc, self.batch_size)
+
+            gen_w1 = self.gen_l1.get_weight_blend(bc, self.batch_size)
+            gen_b1 = self.gen_l1.get_bias_blend(bc, self.batch_size)
+
+            pred_weights = (gen_w0, gen_w1)
+            pred_bias = (gen_b0, gen_b1)
 
             # Predict sequence
-            pred_poses, pred_contacts = self.forward(
-                past_root_vel=root[:, :10],
+            pred_poses, pred_contacts = self.generator.forward(
+                past_root_vel=root_vel[:, :10],
                 past_quats=quats[:, :10],
                 past_root_offset=root_offsets[:, :10],
                 past_quat_offset=quat_offsets[:, :10],
                 past_contacts=contacts[:, :10],
                 target_quats=target_quats,
                 target_root_pos=root_offsets[:, 0],
-                init_root_pos=global_positions[:, 0, :3]
+                init_root_pos=glob_pos[:, 0, :3],
+                pred_weights=pred_weights,
+                pred_bias=pred_bias
             )
             # To root-relative
             fk_pred_poses = pred_poses
@@ -82,7 +102,7 @@ class ETNModel(nn.Module):
 
             # Calculate loss and backpropagate
             loss, l_quat, l_contact, l_pos = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
-                               global_positions[:, 10:-1])  # skipping last (target) frames
+                               glob_pos[:, 10:-1])  # skipping last (target) frames
             assert torch.isfinite(loss), f"loss is not finite: {loss}"
 
             # Backpropagate and optimize
@@ -96,97 +116,6 @@ class ETNModel(nn.Module):
             if self.epoch_idx % val_freq == 0:
                 self.do_validation(val_loader, val_writer)
             self.epoch_idx += 1
-
-    def forward(self,
-                past_root_vel: torch.Tensor,
-                past_quats: torch.Tensor,
-                past_root_offset: torch.Tensor,
-                past_quat_offset: torch.Tensor,
-                past_contacts: torch.Tensor,
-                target_root_pos: torch.Tensor,
-                target_quats: torch.Tensor,
-                init_root_pos: torch.Tensor
-                ):
-
-        lstm_state = None  # TODO: hidden state initializer here
-        pred_poses = list()
-        pred_contacts = list()
-        glob_root = init_root_pos
-
-        # Declaring vars to be assigned in for-loop to prevent compiler warnings
-        next_rvel = None
-        next_quats = None
-        next_contacts = None
-        next_root_offset = None
-        next_quat_offsets = None
-
-        # Initialize with past-context
-        for past_idx in range(10):
-            next_rvel, next_quats, next_contacts, lstm_state = self.__pred_pose(
-                root_vel=past_root_vel[:, past_idx],
-                quats=past_quats[:, past_idx],
-                root_offset=past_root_offset[:, past_idx],
-                quat_offset=past_quat_offset[:, past_idx],
-                contacts=past_contacts[:, past_idx],
-                target_quats=target_quats,
-                prev_state=lstm_state
-            )
-            glob_root += past_root_vel[:, past_idx]  # NOTE: MIGHT BE ONE FRAME OFF
-            next_root_offset = glob_root - target_root_pos
-            next_quat_offsets = next_quats - target_quats
-
-        # Final predicted frame of past-context is first frame of transition.
-        first_frame = torch.cat([next_rvel, next_quats], dim=1)
-        pred_poses.append(first_frame)
-        pred_contacts.append(next_contacts)
-
-        # Predict transition poses
-        for frame_idx in range(30 - 1):
-            # Predict pose
-            next_rvel, next_quats, next_contacts, lstm_state = self.__pred_pose(
-                root_vel=next_rvel,
-                quats=next_quats,
-                root_offset=next_root_offset,
-                quat_offset=next_quat_offsets,
-                contacts=next_contacts,
-                target_quats=target_quats,
-                prev_state=lstm_state
-            )
-            # Update offsets
-            glob_root += next_rvel
-            next_root_offset = glob_root - target_root_pos
-            next_quat_offsets = next_quats - target_quats
-
-            pred_poses.append(torch.cat([next_rvel, next_quats], dim=1))
-            pred_contacts.append(next_contacts)
-
-        # Generated transition is currently a list of tensors of (batch_size, frame_size) of len=transition_length,
-        #   so must be stacked to be (batch_size, transition_length, frame_size)
-        pred_poses = torch.stack(pred_poses, dim=1)
-        pred_contacts = torch.stack(pred_contacts, dim=1)
-
-        return pred_poses, pred_contacts
-
-    def __pred_pose(self, root_vel, quats, root_offset, quat_offset, contacts, target_quats, prev_state):
-        # Get blending coefficients from gating network
-        # TODO
-        # Get NN weights from experts
-        # TODO
-        # Set generator weights and predict next frame
-        # self.generator.set_weights()
-
-        prediction = self.generator.step(
-            root_vel=root_vel,
-            quats=quats,
-            root_offset=root_offset,
-            quat_offset=quat_offset,
-            quat_target=target_quats,
-            contacts=contacts,
-            prev_state=prev_state
-        )
-
-        # Return pred pose tuple
-        return prediction
 
     def do_validation(self, loader: DataLoader, writer: SummaryWriter):
 

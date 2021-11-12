@@ -4,23 +4,19 @@ from torch import nn
 __all__ = ['Encoder', 'Decoder']
 
 class Encoder(nn.Module):
-    def __init__(self, input_size, h0_size, output_size):
+    def __init__(self, dims: tuple):
         """
         Creates a simple 3-layer encoder network.
 
-        :param input_size: num nodes in input layer
-        :param h0_size: num nodes in hidden layer
-        :param output_size: num nodes in output layer
+        :param dims: tuple of size 3. Defines the dimensions of the encoder in order -> (input, h0, output)
         """
         super().__init__()
-        self.input_size = input_size
-        self.h0_size = h0_size
-        self.output_size = output_size
+        self.dims = dims
 
         self.layers = nn.Sequential(
-            nn.Linear(input_size, h0_size),
+            nn.Linear(dims[0], dims[1]),
             nn.LeakyReLU(),
-            nn.Linear(h0_size, output_size),
+            nn.Linear(dims[1], dims[2]),
             nn.LeakyReLU(),
         )
 
@@ -35,26 +31,21 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, input_size, h0_size, h1_size, output_size):
+    def __init__(self, dims):
         """
         Creates a simple 4-layer decoder network.
-        :param input_size: Num nodes in input layer
-        :param h0_size: num nodes in first hidden layer
-        :param h1_size: num nodes in second hidden layer
-        :param output_size: num nodes in output layer
+
+        :param dims: tuple of size 3. Defines the dimensions of the encoder in order -> (input, h0, h1, output)
         """
         super().__init__()
-        self.input_size = input_size
-        self.h0_size = h0_size
-        self.h1_size = h1_size
-        self.output_size = output_size
+        self.dims = dims
 
         self.layers = nn.Sequential(
-            nn.Linear(input_size, self.h0_size),
+            nn.Linear(dims[0], dims[1]),
             nn.LeakyReLU(),
-            nn.Linear(self.h0_size, self.h1_size),
+            nn.Linear(dims[1], dims[2]),
             nn.LeakyReLU(),
-            nn.Linear(self.h1_size, self.output_size)
+            nn.Linear(dims[2], dims[3])
         )
 
     def forward(self, input_vec: torch.Tensor) -> torch.Tensor:
