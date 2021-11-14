@@ -12,7 +12,6 @@ class ParamPredictor(nn.Module):
         self.dims = dims
 
     def forward(self, pred_input, weights, bias):
-        x0 = 6.
         x0 = torch.unsqueeze(pred_input, dim=2)
 
         x0 = t.matmul(weights[0], x0) + bias[0]

@@ -23,6 +23,7 @@ class ETNModel(nn.Module):
         self.batch_size = batch_size
 
         # Loss Vars
+        self.LOSS_MODIFIER_Q = 1
         self.LOSS_MODIFIER_G = 0.1
         self.LOSS_MODIFIER_P = 0.5
 
@@ -45,7 +46,8 @@ class ETNModel(nn.Module):
         self.gen_l0 = ExpertSet((n_experts, gen_dims[1], gen_dims[0]), self.device, rng)  # dims swapped because matmul
         self.gen_l1 = ExpertSet((n_experts, gen_dims[2], gen_dims[1]), self.device, rng)
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
+        params = list(self.parameters()) + list(self.gen_l0.get_parameters()) + list(self.gen_l1.get_parameters())  # include experts parameters
+        self.optimizer = torch.optim.Adam(params, lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
 
         self.to(self.device)
 
@@ -75,16 +77,9 @@ class ETNModel(nn.Module):
             bc = self.gating.forward(root_vel, labels, contacts)
 
             # Get blended parameters from experts
-            gen_w0 = self.gen_l0.get_weight_blend(bc, self.batch_size)
-            gen_b0 = self.gen_l0.get_bias_blend(bc, self.batch_size)
+            pred_weights, pred_bias = self.get_weights(bc)
 
-            gen_w1 = self.gen_l1.get_weight_blend(bc, self.batch_size)
-            gen_b1 = self.gen_l1.get_bias_blend(bc, self.batch_size)
-
-            pred_weights = (gen_w0, gen_w1)
-            pred_bias = (gen_b0, gen_b1)
-
-            # Predict sequence
+            # Predict sequence using expert blend
             pred_poses, pred_contacts = self.generator.forward(
                 past_root_vel=root_vel[:, :10],
                 past_quats=quats[:, :10],
@@ -100,7 +95,6 @@ class ETNModel(nn.Module):
             # To root-relative
             fk_pred_poses = pred_poses
             pred_poses_glob = self.fk(fk_pred_poses)
-
 
             # Calculate loss and backpropagate
             loss, l_quat, l_contact, l_pos = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
@@ -136,21 +130,14 @@ class ETNModel(nn.Module):
         labels = batch[8]
 
         with torch.no_grad():   # Make no gradient calculations
-            # Predict sequence
 
             # Get blending coefficients through gating network
             bc = self.gating.forward(root_vel, labels, contacts)
 
             # Get blended parameters from experts
-            gen_w0 = self.gen_l0.get_weight_blend(bc, self.batch_size)
-            gen_b0 = self.gen_l0.get_bias_blend(bc, self.batch_size)
+            pred_weights, pred_bias = self.get_weights(bc)
 
-            gen_w1 = self.gen_l1.get_weight_blend(bc, self.batch_size)
-            gen_b1 = self.gen_l1.get_bias_blend(bc, self.batch_size)
-
-            pred_weights = (gen_w0, gen_w1)
-            pred_bias = (gen_b0, gen_b1)
-
+            # Predict sequence using expert blend
             pred_poses, pred_contacts = self.generator.forward(
                 past_root_vel=root_vel[:, :10],
                 past_quats=quats[:, :10],
@@ -177,6 +164,18 @@ class ETNModel(nn.Module):
 
             # Report loss
             writer.add_scalar("loss/loss", loss.item(), self.epoch_idx)
+
+    def get_weights(self, bc):
+        gen_w0 = self.gen_l0.get_weight_blend(bc, self.batch_size)
+        gen_b0 = self.gen_l0.get_bias_blend(bc, self.batch_size)
+
+        gen_w1 = self.gen_l1.get_weight_blend(bc, self.batch_size)
+        gen_b1 = self.gen_l1.get_bias_blend(bc, self.batch_size)
+
+        pred_weights = (gen_w0, gen_w1)
+        pred_bias = (gen_b0, gen_b1)
+
+        return pred_weights, pred_bias
 
     def fk(self, frames):
         """
@@ -213,7 +212,7 @@ class ETNModel(nn.Module):
         :return: Accumulated loss of the entire transition
         """
         mae = lambda x, y: torch.mean(torch.abs(y - x))  # Mean absolute error (MAE)
-        l_quat = mae(frames, gt_frames)
+        l_quat = mae(frames, gt_frames) * self.LOSS_MODIFIER_Q
         l_contact = mae(contacts, gt_contacts) * self.LOSS_MODIFIER_G
         l_pos = mae(positions, gt_positions) * self.LOSS_MODIFIER_P
 
