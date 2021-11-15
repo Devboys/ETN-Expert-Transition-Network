@@ -74,30 +74,15 @@ class ETNModel(nn.Module):
             labels       = batch[8]
 
             # Get blending coefficients through gating network
-            bc = self.gating.forward(root_vel, labels, contacts)
-
-            # Get blended parameters from experts
-            pred_weights, pred_bias = self.get_weights(bc)
 
             # Predict sequence using expert blend
-            pred_poses, pred_contacts = self.generator.forward(
-                past_root_vel=root_vel[:, :10],
-                past_quats=quats[:, :10],
-                past_root_offset=root_offsets[:, :10],
-                past_quat_offset=quat_offsets[:, :10],
-                past_contacts=contacts[:, :10],
-                target_quats=target_quats,
-                target_root_pos=root_offsets[:, 0],
-                init_root_pos=glob_pos[:, 0, :3],
-                pred_weights=pred_weights,
-                pred_bias=pred_bias
-            )
-            # To root-relative
+            pred_poses, pred_contacts = self.forward(root_vel, quats, root_offsets, quat_offsets, target_quats, glob_pos, contacts, labels)
+
             fk_pred_poses = pred_poses
             pred_poses_glob = self.fk(fk_pred_poses)
 
             # Calculate loss and backpropagate
-            loss, l_quat, l_contact, l_pos = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
+            loss, l_quat, l_contact, l_pos = self.__loss(pred_poses[:, :, 3:], ground_truth[:, 10:-1, 3:], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
                                glob_pos[:, 10:-1])  # skipping last (target) frames
             assert torch.isfinite(loss), f"loss is not finite: {loss}"
 
@@ -132,24 +117,7 @@ class ETNModel(nn.Module):
         with torch.no_grad():   # Make no gradient calculations
 
             # Get blending coefficients through gating network
-            bc = self.gating.forward(root_vel, labels, contacts)
-
-            # Get blended parameters from experts
-            pred_weights, pred_bias = self.get_weights(bc)
-
-            # Predict sequence using expert blend
-            pred_poses, pred_contacts = self.generator.forward(
-                past_root_vel=root_vel[:, :10],
-                past_quats=quats[:, :10],
-                past_root_offset=root_offsets[:, :10],
-                past_quat_offset=quat_offsets[:, :10],
-                past_contacts=contacts[:, :10],
-                target_quats=target_quats,
-                target_root_pos=-root_offsets[:, 0],
-                init_root_pos=global_positions[:, 0, :3],
-                pred_weights=pred_weights,
-                pred_bias=pred_bias
-            )
+            pred_poses, pred_contacts = self.forward(root_vel, quats, root_offsets, quat_offsets, target_quats, global_positions, contacts, labels)
             pred_positions = self.fk(pred_poses)
 
             # Calculate loss
@@ -164,6 +132,29 @@ class ETNModel(nn.Module):
 
             # Report loss
             writer.add_scalar("loss/loss", loss.item(), self.epoch_idx)
+
+    def forward(self, root_vel, quats, root_offsets, quat_offsets, target_quats, glob_pos, contacts, labels):
+        # Get blending coefficients through gating network
+        bc = self.gating.forward(root_vel, labels, contacts)
+
+        # Get blended parameters from experts
+        pred_weights, pred_bias = self.get_weights(bc)
+
+        # Predict sequence using expert blend
+        pred_poses, pred_contacts = self.generator.forward(
+            past_root_vel=root_vel[:, :10],
+            past_quats=quats[:, :10],
+            past_root_offset=root_offsets[:, :10],
+            past_quat_offset=quat_offsets[:, :10],
+            past_contacts=contacts[:, :10],
+            target_quats=target_quats,
+            target_root_pos=root_offsets[:, 0],
+            init_root_pos=glob_pos[:, 0, :3],
+            pred_weights=pred_weights,
+            pred_bias=pred_bias
+        )
+
+        return pred_poses, pred_contacts
 
     def get_weights(self, bc):
         gen_w0 = self.gen_l0.get_weight_blend(bc, self.batch_size)
@@ -228,6 +219,8 @@ class ETNModel(nn.Module):
             'batch_idx': self.batch_idx,
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'expert_gen_l0': self.gen_l0.get_parameters(),
+            'expert_gen_l1': self.gen_l1.get_parameters()
         }, filename)
 
     def load(self, filename):
@@ -240,5 +233,8 @@ class ETNModel(nn.Module):
         self.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.batch_idx = checkpoint["batch_idx"]
+        self.gen_l0.set_parameters(checkpoint['expert_gen_l0'])
+        self.gen_l1.set_parameters(checkpoint['expert_gen_l1'])
+
 
 

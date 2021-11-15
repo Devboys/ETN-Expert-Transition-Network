@@ -41,3 +41,7 @@ class ExpertSet:
 
     def get_parameters(self):
         return self.weights, self.bias
+
+    def set_parameters(self, params):
+        self.weights = params[0]
+        self.bias = params[1]

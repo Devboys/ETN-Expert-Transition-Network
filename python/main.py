@@ -31,7 +31,7 @@ def run(base_dir, is_param_optimizing: bool):
 
     # HYPERPARAMS
     minibatch_size = 32
-    n_epochs = 11  # i.e. training length
+    n_epochs = 10  # i.e. training length
     learning_rate = 0.0005
     n_experts = 4
 
@@ -59,7 +59,7 @@ def run(base_dir, is_param_optimizing: bool):
         # Get next batch and extract
         batch = next(iter(val_loader))
         batch = [b.float().to(model.device) for b in batch]  # Convert to float values for concat
-        root = batch[0]
+        root_vel = batch[0]
         quats = batch[1]
         root_offsets = batch[2]
         quat_offsets = batch[3]
@@ -70,20 +70,11 @@ def run(base_dir, is_param_optimizing: bool):
         labels = batch[8]
 
         # Predict transition
-        pred_poses, pred_contacts = model.forward(
-            past_root_vel=root[:, :10],
-            past_quats=quats[:, :10],
-            past_root_offset=root_offsets[:, :10],
-            past_quat_offset=quat_offsets[:, :10],
-            past_contacts=contacts[:, :10],
-            target_quats=target_quats,
-            target_root_pos=-root_offsets[:, 0],
-            init_root_pos=global_positions[:, 0, :3]
-        )
+        pred_poses, pred_contacts = model.forward(root_vel, quats, root_offsets, quat_offsets, target_quats, global_positions, contacts, labels)
         pred_pos = model.fk(pred_poses)
 
         # Parse 'original' data aka batch. Used for comparison
-        root, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
+        root_vel, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
             contacts, labels = [b.float().to(model.device) for b in batch]
 
         org_quats, pred_quats, org_pos, pred_pos, org_contacts, pred_contacts = utils_print.process_sample_pair(quats,
@@ -107,7 +98,7 @@ def run(base_dir, is_param_optimizing: bool):
         sp.start_print_loop(org_samples, pred_samples, labels)
     else:
         model.do_train(train_loader, val_loader, n_epochs, 10, tensorboard_dir)
-        # model.save(model_path)
+        model.save(model_path)
 
 
 run(sys.path[0], False)  # Encapsulate run behaviour to prevent accidental globals

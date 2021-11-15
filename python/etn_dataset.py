@@ -123,7 +123,6 @@ class ETNDataset(IterableDataset):
 
                 ground_truth = np.concatenate([root_vel, quats], axis=1)
 
-                # TODO: Add labels as output of iterator and include in generator code
                 yield root_vel, quats, root_offsets, quat_offsets, target_frame, ground_truth, global_positions, contacts, labels
 
     def to_etn_input(self, bvh: BVHAnimation, past_length: int = 10, transition_length: int = 30, window_step: int = 15) -> np.ndarray:

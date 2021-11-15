@@ -92,7 +92,7 @@ class ETNGenerator(nn.Module):
             next_root_offset = glob_root - target_root_pos
             next_quat_offsets = next_quats - target_quats
 
-            pred_poses.append(t.cat([next_rvel, next_quats], dim=1))
+            pred_poses.append(t.cat([glob_root, next_quats], dim=1))
             pred_contacts.append(next_contacts)
 
         # Generated transition is currently a list of tensors of (batch_size, frame_size) of len=transition_length,
