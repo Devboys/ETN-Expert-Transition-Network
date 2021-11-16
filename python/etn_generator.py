@@ -1,13 +1,17 @@
+import torch.nn
 from torch import nn
 import torch as t
 from etn_dataset import HierarchyDefinition
 from etn_encoderdecoder import *
 
 from parametized_predictor import ParamPredictor
+from parametized_lstm import ParamLSTM
 
 class ETNGenerator(nn.Module):
     def __init__(self, hierarchy: HierarchyDefinition, device:str):
         super().__init__()
+
+        self.device = device
 
         self.num_joints = hierarchy.bone_count()
         self.c_size = 4  # Contact information size (2 bools pr foot)
@@ -22,11 +26,11 @@ class ETNGenerator(nn.Module):
         self.encoded_size = 256 + 256 + 256  # Encoded vector is concatenated output of each encoder.
 
         # Define prediction layer (LSTM)
-        self.predictor = ParamPredictor(dims=(self.encoded_size, 512, 512))
+        self.predictor = ParamLSTM(input_size = self.encoded_size, hidden_size=512, device=self.device)
 
         # Define decoder
         self.decoder = Decoder(dims=(512, 512, 256, self.q_size + self.r_size + self.c_size))
-        self.to(device)
+        self.to(self.device)
 
     def forward(self,
                 past_root_vel: t.Tensor,
@@ -52,16 +56,18 @@ class ETNGenerator(nn.Module):
         next_contacts = None
         next_root_offset = None
         next_quat_offsets = None
+        hidden_states = None
 
         # Initialize with past-context
         for past_idx in range(10):
-            next_rvel, next_quats, next_contacts = self.step(
+            next_rvel, next_quats, next_contacts, hidden_states = self.step(
                 root_vel=past_root_vel[:, past_idx],
                 quats=past_quats[:, past_idx],
                 root_offset=past_root_offset[:, past_idx],
                 quat_offset=past_quat_offset[:, past_idx],
                 contacts=past_contacts[:, past_idx],
                 target_quats=target_quats,
+                prev_states = hidden_states,
                 pred_weights=pred_weights,
                 pred_bias=pred_bias
             )
@@ -77,13 +83,14 @@ class ETNGenerator(nn.Module):
         # Predict transition poses
         for frame_idx in range(30 - 1):
             # Predict pose
-            next_rvel, next_quats, next_contacts = self.step(
+            next_rvel, next_quats, next_contacts, hidden_states = self.step(
                 root_vel=next_rvel,
                 quats=next_quats,
                 root_offset=next_root_offset,
                 quat_offset=next_quat_offsets,
                 contacts=next_contacts,
                 target_quats=target_quats,
+                prev_states=hidden_states,
                 pred_weights=pred_weights,
                 pred_bias=pred_bias
             )
@@ -109,6 +116,7 @@ class ETNGenerator(nn.Module):
              quat_offset: t.Tensor,
              target_quats: t.Tensor,
              contacts: t.Tensor,
+             prev_states,
              pred_weights,
              pred_bias
              # TODO: tta input here
@@ -138,7 +146,7 @@ class ETNGenerator(nn.Module):
         pred_in = t.cat([h_state, h_offset, h_target], dim=1)
 
         # Predict next pose
-        pred_out = self.predictor.forward(pred_in, pred_weights, pred_bias)
+        pred_out, hidden_states = self.predictor.forward(pred_in, prev_states, pred_weights, pred_bias)
 
         # Decode prediction
         out = self.decoder.forward(pred_out)
@@ -153,4 +161,4 @@ class ETNGenerator(nn.Module):
         next_quats = t.nn.functional.normalize(next_quats, dim=2)
         next_quats = t.reshape(next_quats, (batch_size, num_elements))
 
-        return next_root_vel, next_quats, t.sigmoid(next_contacts)
+        return next_root_vel, next_quats, t.sigmoid(next_contacts), hidden_states

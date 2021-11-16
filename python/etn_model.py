@@ -9,7 +9,7 @@ import tqdm
 import utils_fk
 import utils_tensorboard
 from etn_gating import ETNGating
-from expert_set import ExpertSet
+from lstm_expert import LSTM_Expert
 from etn_generator import ETNGenerator
 from etn_dataset import HierarchyDefinition
 
@@ -42,11 +42,10 @@ class ETNModel(nn.Module):
         self.generator = ETNGenerator(hierarchy, self.device)
 
         # Generator expert weights
-        gen_dims = self.generator.predictor.dims  # expert weights must match generator dimensions.
-        self.gen_l0 = ExpertSet((n_experts, gen_dims[1], gen_dims[0]), self.device, rng)  # dims swapped because matmul
-        self.gen_l1 = ExpertSet((n_experts, gen_dims[2], gen_dims[1]), self.device, rng)
+        gen_dims = self.generator.predictor.get_dims()  # expert weights must match generator dimensions.
+        self.lstm_expert = LSTM_Expert(gen_dims[0], gen_dims[1], n_experts, self.device, rng)
 
-        params = list(self.parameters()) + list(self.gen_l0.get_parameters()) + list(self.gen_l1.get_parameters())  # include experts parameters
+        params = list(self.parameters()) + list(self.lstm_expert.get_parameters()[0]) + list(self.lstm_expert.get_parameters()[1])  # include experts parameters
         self.optimizer = torch.optim.Adam(params, lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
 
         self.to(self.device)
@@ -138,7 +137,8 @@ class ETNModel(nn.Module):
         bc = self.gating.forward(root_vel, labels, contacts)
 
         # Get blended parameters from experts
-        pred_weights, pred_bias = self.get_weights(bc)
+        pred_weights = self.lstm_expert.get_weight_blend(bc, self.batch_size)
+        pred_bias = self.lstm_expert.get_bias_blend(bc, self.batch_size)
 
         # Predict sequence using expert blend
         pred_poses, pred_contacts = self.generator.forward(
@@ -156,18 +156,6 @@ class ETNModel(nn.Module):
 
         return pred_poses, pred_contacts
 
-    def get_weights(self, bc):
-        gen_w0 = self.gen_l0.get_weight_blend(bc, self.batch_size)
-        gen_b0 = self.gen_l0.get_bias_blend(bc, self.batch_size)
-
-        gen_w1 = self.gen_l1.get_weight_blend(bc, self.batch_size)
-        gen_b1 = self.gen_l1.get_bias_blend(bc, self.batch_size)
-
-        pred_weights = (gen_w0, gen_w1)
-        pred_bias = (gen_b0, gen_b1)
-
-        return pred_weights, pred_bias
-
     def fk(self, frames):
         """
         Performs FK calculations on the given pose using the stored generators hierarchy.
@@ -182,7 +170,7 @@ class ETNModel(nn.Module):
         frames = utils_fk.torch_forward_kinematics_batch(
             offsets=torch.cat(frame_count * [self.bone_offsets]),
             pose=frames,
-            parents=self.parent_ids,  # TODO: removed [0] verify that its ok
+            parents=self.parent_ids,
             joint_count=self.num_joints
         )
 
