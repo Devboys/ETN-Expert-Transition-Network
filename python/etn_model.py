@@ -207,8 +207,7 @@ class ETNModel(nn.Module):
             'batch_idx': self.batch_idx,
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'expert_gen_l0': self.gen_l0.get_parameters(),
-            'expert_gen_l1': self.gen_l1.get_parameters()
+            'lstm_experts': self.lstm_expert.get_parameters(),
         }, filename)
 
     def load(self, filename):
@@ -221,8 +220,7 @@ class ETNModel(nn.Module):
         self.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.batch_idx = checkpoint["batch_idx"]
-        self.gen_l0.set_parameters(checkpoint['expert_gen_l0'])
-        self.gen_l1.set_parameters(checkpoint['expert_gen_l1'])
+        self.lstm_expert.set_parameters(checkpoint["lstm_experts"])
 
 
 

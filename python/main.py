@@ -30,7 +30,7 @@ def run(base_dir, is_param_optimizing: bool):
     rng = np.random.RandomState(23456)
 
     # HYPERPARAMS
-    minibatch_size = 16
+    minibatch_size = 32
     n_epochs = 10000  # i.e. training length
     learning_rate = 0.0005
     n_experts = 4
