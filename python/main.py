@@ -33,7 +33,7 @@ def run(base_dir, is_param_optimizing: bool):
     minibatch_size = 16
     n_epochs = 10000  # i.e. training length
     learning_rate = 0.0005
-    n_experts = 8
+    n_experts = 4
 
     if is_param_optimizing:
         # for hyperparam optimization, learning rate is a random float between 0.0001 and 0.1

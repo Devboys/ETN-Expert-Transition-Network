@@ -28,7 +28,7 @@ class ETNModel(nn.Module):
         self.LOSS_MODIFIER_P = 0.5
 
         # FK Vars
-        self.bone_offsets = torch.from_numpy(np.tile(hierarchy.bone_offsets, (32, 1, 1))).float().to(
+        self.bone_offsets = torch.from_numpy(np.tile(hierarchy.bone_offsets, (batch_size, 1, 1))).float().to(
             self.device)  # Store separately as tensor
         self.parent_ids = torch.from_numpy(hierarchy.parent_ids).float().to(self.device)  # Store separately as tensor
         self.num_joints = hierarchy.bone_count()
