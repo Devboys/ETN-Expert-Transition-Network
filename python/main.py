@@ -22,8 +22,8 @@ def run(base_dir, is_param_optimizing: bool):
     basedir = str(pathlib.Path(__file__).parent.parent.absolute())
     tensorboard_dir = f"{base_dir}/tensorboard/"
     model_dir = f"{base_dir}/models/"
-    train_dir = f"{basedir}/data/lafan1_reduced/train"
-    val_dir = f"{basedir}/data/lafan1_reduced/val"
+    train_dir = f"{basedir}/data/lafan1_reduced/val"
+    val_dir = f"{basedir}/data/lafan1_reduced/train"
 
     model_id = str(uuid.uuid4())[:8] if is_param_optimizing else "NaN"
 
@@ -40,7 +40,7 @@ def run(base_dir, is_param_optimizing: bool):
         power = -3 * np.random.rand()
         learning_rate = 10**(-1 + power)
 
-    model_name = f"etn_{model_id}_bs{str(minibatch_size)}_ne{str(n_epochs)}_lr{str(learning_rate)} test.pt"
+    model_name = f"etn_{model_id}_bs{str(minibatch_size)}_ne{str(n_epochs)}_lr{str(learning_rate)}.pt"
     model_path = model_dir + model_name
 
     train_data = ETNDataset(train_dir, past_length=PST_LENGTH, transition_length=SEQ_LENGTH)
@@ -48,7 +48,7 @@ def run(base_dir, is_param_optimizing: bool):
     val_data = ETNDataset(val_dir, past_length=PST_LENGTH, transition_length=SEQ_LENGTH, train_data=train_data)
     val_loader = DataLoader(val_data, batch_size=minibatch_size)
 
-    model = ETNModel(name=model_name, hierarchy=val_data.hierarchy, batch_size=minibatch_size, rng=rng, learning_rate=learning_rate, n_experts=n_experts, )
+    model = ETNModel(name=model_name, hierarchy=val_data.hierarchy, batch_size=minibatch_size, rng=rng, learning_rate=learning_rate, n_experts=n_experts)
     print(f"Running on: {model.device}")
 
     if Path(model_path).exists():

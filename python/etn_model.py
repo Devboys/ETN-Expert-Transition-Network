@@ -23,9 +23,9 @@ class ETNModel(nn.Module):
         self.batch_size = batch_size
 
         # Loss Vars
-        self.LOSS_MODIFIER_Q = 1
-        self.LOSS_MODIFIER_G = 0.1
-        self.LOSS_MODIFIER_P = 0.5
+        self.LOSS_MODIFIER_Q = 1  # quat loss mod
+        self.LOSS_MODIFIER_G = 0.1  # contact loss mod
+        self.LOSS_MODIFIER_P = 0.5  # position loss mod
 
         # FK Vars
         self.bone_offsets = torch.from_numpy(np.tile(hierarchy.bone_offsets, (batch_size, 1, 1))).float().to(
@@ -34,8 +34,8 @@ class ETNModel(nn.Module):
         self.num_joints = hierarchy.bone_count()
 
         # Training vars
-        self.batch_idx = 0
         self.epoch_idx = 0
+        self.batch_idx = 0
 
         # Build Model
         self.gating = ETNGating(n_experts, self.device)

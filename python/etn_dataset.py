@@ -86,7 +86,6 @@ class ETNDataset(IterableDataset):
                 file_end_idx += len(parsed_file)
                 file_name = os.path.basename(file)
                 self.file_indices.append((file_name, file_start_idx, file_end_idx))
-
                 file_start_idx = file_end_idx + 1
 
             self.animations = np.concatenate(anims)
@@ -102,6 +101,7 @@ class ETNDataset(IterableDataset):
             )
 
         # Resolve norm-params
+        #TODO: LOOK AT THIS
         if train_data is None:
             roots = np.array([joint_r for joint_r in self.animations[:, 0]])
             self.root_norm_mean, self.root_norm_std = norm_params(roots)
@@ -182,7 +182,7 @@ class ETNDataset(IterableDataset):
             s_root_offsets = offsets[:, :3]
             s_quat_offsets = offsets[:, 3:]
 
-            # Get ample target vector(s)
+            # Get sample target vector(s)
             s_target_frame = frames[-1, 3:]  # Note: This is quats only.
 
             samples.append(np.array([
