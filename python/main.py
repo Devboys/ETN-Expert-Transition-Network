@@ -22,8 +22,8 @@ def run(base_dir, is_param_optimizing: bool):
     basedir = str(pathlib.Path(__file__).parent.parent.absolute())
     tensorboard_dir = f"{base_dir}/tensorboard/"
     model_dir = f"{base_dir}/models/"
-    train_dir = f"{basedir}/data/lafan1_reduced/val"
-    val_dir = f"{basedir}/data/lafan1_reduced/train"
+    train_dir = f"{basedir}/data/lafan1_reduced/train"
+    val_dir = f"{basedir}/data/lafan1_reduced/val"
 
     model_id = str(uuid.uuid4())[:8] if is_param_optimizing else "NaN"
 
