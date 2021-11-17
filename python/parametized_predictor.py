@@ -5,7 +5,8 @@ import torch.nn.functional as f
 
 
 class ParamPredictor(nn.Module):
-    # Very simple 3-layer MLP predictor that takes weights and biases as inputs. TODO: replace with GRU or LSTM in network
+    # Very simple 2-hidden-layer functional MLP predictor that takes weights and biases as inputs.
+    # Replaced by parametized_LSTM but kept here for posterity and/or simple reference
 
     def __init__(self, dims: tuple):
         super().__init__()

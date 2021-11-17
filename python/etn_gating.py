@@ -3,6 +3,9 @@ from torch import nn
 
 
 class ETNGating(nn.Module):
+    """
+    Simple 2-hidden-layer MLP gating network. Produces blending coefficients for expert-blending.
+    """
     def __init__(self, n_experts, device: str):
         super().__init__()
 
@@ -29,12 +32,20 @@ class ETNGating(nn.Module):
         self.to(device)
 
     def forward(self, root_vel: t.Tensor, label: t.Tensor, contacts: t.Tensor):
+        """
+        The forward pass of the network. Takes as input the root_velocities, labels, and contacts for the entire
+        sequence and produces blending coefficients for expert-blending
+        :param root_vel: Root-velocity tensors for entire predicted sequence.
+        :param label: Action-labels tensors for entire predicted sequence.
+        :param contacts: Contact-tensors for entire predicted sequence
+        :return: blending coefficient tensor of dims=[batch_size, n_experts]
+        """
 
         b = root_vel.shape[0]  # num batches
         s = root_vel.shape[1]  # num frames in seq
-        root_vel = t.reshape(root_vel, [b, s * 3])    # [b, s, 3] -> [b, s * 3]
-        label =    t.reshape(label, [b, s * 4])       # [b, s, 4] -> [?, s * 4]
-        contacts = t.reshape(contacts, [b, s * 4])    # [b, s, 4] -> [?, s * 4]
+        root_vel = t.reshape(root_vel, [b, s * 3])  # [b, s, 3] -> [b, s * 3]
+        label = t.reshape(label, [b, s * 4])        # [b, s, 4] -> [b, s * 4]
+        contacts = t.reshape(contacts, [b, s * 4])  # [b, s, 4] -> [b, s * 4]
 
         vec_in = t.cat([root_vel, label, contacts], dim=1)
         bc = self.layers.forward(vec_in)

@@ -9,7 +9,7 @@ import tqdm
 import utils_fk
 import utils_tensorboard
 from etn_gating import ETNGating
-from lstm_expert import LSTM_Expert
+from lstm_expert import LSTMExpert
 from etn_generator import ETNGenerator
 from etn_dataset import HierarchyDefinition
 
@@ -43,7 +43,7 @@ class ETNModel(nn.Module):
 
         # Generator expert weights
         gen_dims = self.generator.predictor.get_dims()  # expert weights must match generator dimensions.
-        self.lstm_expert = LSTM_Expert(gen_dims[0], gen_dims[1], n_experts, self.device, rng)
+        self.lstm_expert = LSTMExpert(gen_dims[0], gen_dims[1], n_experts, self.device, rng)
 
         params = list(self.parameters()) + list(self.lstm_expert.get_parameters()[0]) + list(self.lstm_expert.get_parameters()[1])  # include experts parameters
         self.optimizer = torch.optim.Adam(params, lr=learning_rate, amsgrad=True, betas=(0.5, 0.9))
@@ -51,6 +51,15 @@ class ETNModel(nn.Module):
         self.to(self.device)
 
     def do_train(self, train_loader: DataLoader, val_loader: DataLoader, num_epochs: int, val_freq: int, tensorboard_dir: str):
+        """
+        Trains the model for the given number of epochs, using the data from train_loader.
+
+        :param train_loader: The DataLoader for the training dataset.
+        :param val_loader: The DataLoader for the validation dataset.
+        :param num_epochs: The number of epochs to train for
+        :param val_freq: How often to validate network.
+        :param tensorboard_dir: Path to save tensorboard logs.
+        """
 
         train_writer, val_writer = utils_tensorboard.get_writers(tensorboard_dir, self.name)
         train_iter = iter(train_loader)
@@ -72,9 +81,6 @@ class ETNModel(nn.Module):
             contacts     = batch[7]
             labels       = batch[8]
 
-            # Get blending coefficients through gating network
-
-            # Predict sequence using expert blend
             pred_poses, pred_contacts = self.forward(root_vel, quats, root_offsets, quat_offsets, target_quats, glob_pos, contacts, labels)
 
             fk_pred_poses = pred_poses
@@ -98,7 +104,12 @@ class ETNModel(nn.Module):
             self.epoch_idx += 1
 
     def do_validation(self, loader: DataLoader, writer: SummaryWriter):
+        """
+        Does a single validation test on the network. Does not produce gradients and writes loss to the given writer.
 
+        :param loader: DataLoader for the validation dataset
+        :param writer: Writer for validation loss.
+        """
         self.eval()  # Set network to eval mode.
         batch = next(iter(loader))
         batch = [b.float().to(self.device) for b in batch]  # Convert to float values for concat
@@ -133,6 +144,12 @@ class ETNModel(nn.Module):
             writer.add_scalar("loss/loss", loss.item(), self.epoch_idx)
 
     def forward(self, root_vel, quats, root_offsets, quat_offsets, target_quats, glob_pos, contacts, labels):
+        """
+        Forward pass of entire model: \n
+            1. Gets blending coefficients from gating network
+            2. Blends expert-parameters using blending-coefficients.
+            3. Predicts sequence transition using blended expert-params.
+        """
         # Get blending coefficients through gating network
         bc = self.gating.forward(root_vel, labels, contacts)
 
