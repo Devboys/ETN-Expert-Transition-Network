@@ -65,7 +65,7 @@ class LSTM_Expert:
         x = t.unsqueeze(param, 0)
         x = x.repeat([batch_size, 1, 1, 1])
         bc = t.unsqueeze(t.unsqueeze(bc, -1), -1)
-        blend = bc * x
+        blend = t.mul(bc, x)
         return t.sum(blend, dim=1)
 
     def get_parameters(self):
