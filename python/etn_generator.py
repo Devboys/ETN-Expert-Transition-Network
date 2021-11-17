@@ -363,7 +363,7 @@ class ETNGenerator(nn.Module):
                  ):
 
         # Set train and val writer
-        self.train_writer, self.val_writer = get_writers(log_dir, f"etn_{model_id}_lr{self.lr}")
+        self.train_writer, self.val_writer = get_writers(log_dir, f"rtn_{model_id}_lr{self.lr}")
 
         data_iter = iter(train_loader)
         pbar = tqdm.tqdm(range(n_train_batches))

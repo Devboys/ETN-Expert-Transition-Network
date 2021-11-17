@@ -54,7 +54,7 @@ class ETNDataset(IterableDataset):
         # Velocity threshold value for contact-calculations
         self.velfactor = 1.7
 
-        cache_path = data_dir + '/etn_cache.npz'
+        cache_path = data_dir + '/rtn_cache.npz'
         if os.path.exists(cache_path):
             # Load data from cache
             with np.load(cache_path, allow_pickle=True) as data:
