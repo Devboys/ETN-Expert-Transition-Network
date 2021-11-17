@@ -77,12 +77,13 @@ def run(base_dir, is_param_optimizing: bool):
         root_vel, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
             contacts, labels = [b.float().to(model.device) for b in batch]
 
-        org_quats, pred_quats, org_pos, pred_pos, org_contacts, pred_contacts = utils_print.process_sample_pair(quats,
-                                                                                                    pred_poses,
-                                                                                                    global_positions,
-                                                                                                    pred_pos,
-                                                                                                    contacts,
-                                                                                                    pred_contacts)
+        s_pair = utils_print.process_sample_pair(quats, pred_poses, global_positions, pred_pos, contacts, pred_contacts)
+        org_quats = s_pair[0]
+        pred_quats = s_pair[1]
+        org_pos = s_pair[2]
+        pred_pos = s_pair[3]
+        org_contacts = s_pair[4]
+        pred_contacts = s_pair[5]
 
         # Print hierarchy info
         separator = ';'
