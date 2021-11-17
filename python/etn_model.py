@@ -82,13 +82,17 @@ class ETNModel(nn.Module):
             labels       = batch[8]
 
             pred_poses, pred_contacts = self.forward(root_vel, quats, root_offsets, quat_offsets, target_quats, glob_pos, contacts, labels)
+            pred_poses_glob = self.fk(pred_poses)
 
-            fk_pred_poses = pred_poses
-            pred_poses_glob = self.fk(fk_pred_poses)
-
-            # Calculate loss and backpropagate
-            loss, l_quat, l_contact, l_pos = self.__loss(pred_poses[:, :, 3:], ground_truth[:, 10:-1, 3:], pred_contacts, contacts[:, 10:-1], pred_poses_glob,
-                               glob_pos[:, 10:-1])  # skipping last (target) frames
+            # Calculate loss
+            loss, l_quat, l_contact, l_pos = self.__loss(
+                frames=pred_poses[:, :, 3:],
+                gt_frames=ground_truth[:, 10:-1, 3:],
+                contacts=pred_contacts,
+                gt_contacts=contacts[:, 10:-1],
+                positions=pred_poses_glob,
+                gt_positions=glob_pos[:, 10:-1]
+            )  # skipping last (target) frames
             assert torch.isfinite(loss), f"loss is not finite: {loss}"
 
             # Backpropagate and optimize
@@ -103,42 +107,42 @@ class ETNModel(nn.Module):
                 self.do_validation(val_loader, val_writer)
             self.epoch_idx += 1
 
-    def do_validation(self, loader: DataLoader, writer: SummaryWriter):
+    def do_validation(self, val_loader: DataLoader, writer: SummaryWriter):
         """
         Does a single validation test on the network. Does not produce gradients and writes loss to the given writer.
 
-        :param loader: DataLoader for the validation dataset
+        :param val_loader: DataLoader for the validation dataset
         :param writer: Writer for validation loss.
         """
         self.eval()  # Set network to eval mode.
-        batch = next(iter(loader))
-        batch = [b.float().to(self.device) for b in batch]  # Convert to float values for concat
 
-        root_vel = batch[0]
-        quats = batch[1]
+        batch = next(iter(val_loader))
+        batch = [b.float().to(self.device) for b in batch]  # Convert to float values for concat
+        root_vel     = batch[0]
+        quats        = batch[1]
         root_offsets = batch[2]
         quat_offsets = batch[3]
         target_quats = batch[4]
         ground_truth = batch[5]
-        global_positions = batch[6]
-        contacts = batch[7]
-        labels = batch[8]
+        glob_pos     = batch[6]
+        contacts     = batch[7]
+        labels       = batch[8]
 
         with torch.no_grad():   # Make no gradient calculations
 
-            # Get blending coefficients through gating network
-            pred_poses, pred_contacts = self.forward(root_vel, quats, root_offsets, quat_offsets, target_quats, global_positions, contacts, labels)
-            pred_positions = self.fk(pred_poses)
+            pred_poses, pred_contacts = self.forward(root_vel, quats, root_offsets, quat_offsets, target_quats, glob_pos, contacts, labels)
+
+            pred_poses_glob = self.fk(pred_poses)
 
             # Calculate loss
             loss, l_quat, l_contact, l_pos = self.__loss(
-                frames=pred_poses,
-                gt_frames=ground_truth[:, 10:-1],  # skip last (target) frame
+                frames=pred_poses[:, :, 3:],
+                gt_frames=ground_truth[:, 10:-1, 3:],
                 contacts=pred_contacts,
-                gt_contacts=contacts[:, 10:-1],  # skip last (target) frame
-                positions=pred_positions,
-                gt_positions=global_positions[:, 10:-1]  # skip last (target) frame
-            )
+                gt_contacts=contacts[:, 10:-1],
+                positions=pred_poses_glob,
+                gt_positions=glob_pos[:, 10:-1]
+            )  # skipping last (target) frames
 
             # Report loss
             writer.add_scalar("loss/loss", loss.item(), self.epoch_idx)
