@@ -126,7 +126,7 @@ def run(base_dir, is_param_optimizing: bool):
 
     # HYPERPARAMS
     batch_size = 32
-    n_batches = 1  # i.e. training length
+    n_batches = 10000  # i.e. training length
     learning_rate = 0.0005
 
     if is_param_optimizing:
@@ -144,7 +144,10 @@ def run(base_dir, is_param_optimizing: bool):
 
     generator = ETNGenerator(
         hierarchy=val_data.hierarchy,
-        learning_rate=learning_rate
+        rvel_mean = train_data.root_norm_mean,
+        rvel_std = train_data.root_norm_std,
+        learning_rate=learning_rate,
+        batch_size=batch_size
     )
 
     if Path(model_path).exists():

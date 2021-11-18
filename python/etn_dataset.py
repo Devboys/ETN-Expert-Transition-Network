@@ -7,7 +7,7 @@ import random
 
 from bvh_animation import BVHAnimation
 from utils_fk import np_forward_kinematics_batch
-from utils_norm import *
+import utils_norm
 
 
 class HierarchyDefinition:
@@ -104,15 +104,15 @@ class ETNDataset(IterableDataset):
         # Resolve norm-params
         if train_data is None:
             roots = np.array([joint_r for joint_r in self.animations[:, 0]])
-            self.root_norm_mean, self.root_norm_std = norm_params(roots)
+            self.root_norm_mean, self.root_norm_std = utils_norm.norm_params(roots)
         else:
             self.root_norm_mean = train_data.root_norm_std
             self.root_norm_std = train_data.root_norm_std
 
         # Normalize root velocities
-        self.animations[:, 0] = normalize_vectors(self.animations[:, 0], self.root_norm_mean, self.root_norm_std)
+        self.animations[:, 0] = utils_norm.normalize_vectors(self.animations[:, 0], self.root_norm_mean, self.root_norm_std)
         # Normalize root offsets
-        self.animations[:, 2] = normalize_vectors(self.animations[:, 2], self.root_norm_mean, self.root_norm_std)
+        self.animations[:, 2] = utils_norm.normalize_vectors(self.animations[:, 2], self.root_norm_mean, self.root_norm_std)
 
     def __iter__(self):
         while True:
@@ -160,7 +160,7 @@ class ETNDataset(IterableDataset):
 
         quats = animation[:, 3:]
 
-        global_positions = self.extract_glob_positions(animation)
+        global_positions = self.extract_glob_positions(animation, True)  # TODO: CHANGE VAR NAMES TO ROOT_SPACE
 
         pos = global_positions.reshape((len(global_positions), self.hierarchy.bone_count(), 3))
         contacts = self.extract_feet_contacts(pos)
@@ -204,10 +204,12 @@ class ETNDataset(IterableDataset):
         root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, len(frames))]
         return np.asarray(root_vel)
 
-    def extract_glob_positions(self, frames) -> np.ndarray:
+    def extract_glob_positions(self, frames, in_root_space: bool) -> np.ndarray:
         fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]),
                                len(frames), 0)
         fk_pose = frames  # concatenated (root_pos, joint_rots)
+        if in_root_space:
+            fk_pose[:, :3] = [0, 0, 0]
         global_positions = np_forward_kinematics_batch(
             offsets=fk_offsets,
             pose=fk_pose,

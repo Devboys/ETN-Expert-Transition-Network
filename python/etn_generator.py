@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from torch import nn
 from torch.utils.data import DataLoader
 import torch as t
@@ -6,6 +7,7 @@ import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from utils_fk import torch_forward_kinematics_batch
+import utils_norm
 from utils_tensorboard import *
 from etn_dataset import HierarchyDefinition
 
@@ -75,7 +77,7 @@ class Decoder(nn.Module):
 
 
 class ETNGenerator(nn.Module):
-    def __init__(self, hierarchy: HierarchyDefinition, learning_rate=1e-3):
+    def __init__(self, hierarchy: HierarchyDefinition, rvel_mean, rvel_std, learning_rate=1e-3, batch_size=32, ):
         """
 
         :param hierarchy: The HierarchyDefinition of the data to work with.
@@ -114,7 +116,10 @@ class ETNGenerator(nn.Module):
 
         self.lr = learning_rate
 
-        self.bone_offsets = t.from_numpy(np.tile(hierarchy.bone_offsets, (32, 1, 1))).float().to(self.device)  # Store separately as tensor
+        self.rvel_mean = t.tensor(rvel_mean)
+        self.rvel_std = t.tensor(rvel_std)
+
+        self.bone_offsets = t.from_numpy(np.tile(hierarchy.bone_offsets, (batch_size, 1, 1))).float().to(self.device)  # Store separately as tensor
         self.parent_ids = t.from_numpy(hierarchy.parent_ids).float().to(self.device)  # Store separately as tensor
 
     def __step(self,
@@ -196,9 +201,8 @@ class ETNGenerator(nn.Module):
         """
 
         lstm_state = None  # TODO: hidden state initializer here
-        output_frames = list()
+        output_poses = list()
         sequence_contacts = list()
-        glob_root = None
 
         # Declaring vars to be assigned in for-loop to prevent compiler warnings
         root = None
@@ -206,6 +210,7 @@ class ETNGenerator(nn.Module):
         contacts = None
         root_offset = None
         quat_offsets = None
+        glob_root = None
         # TODO: generate base gauss noise for z_target calculations in step-function here.
 
         # PAST CONTEXT
@@ -225,15 +230,14 @@ class ETNGenerator(nn.Module):
             )
             # Update offsets
             if glob_root is None:
-                glob_root = root
+                glob_root = root_in[:, frame_index]
             else:
-                glob_root += root
+                glob_root += root_in[:, frame_index]
             root_offset = glob_root - target_root_pos
             quat_offsets = quats - target_quats
 
         # Save last output since that is the first frame of our transition
-        first_frame = t.cat([root, quats], dim=1)
-        output_frames.append(first_frame)
+        output_poses.append(t.cat([root, quats], dim=1))
         sequence_contacts.append(contacts)
 
         # TRANSITION
@@ -254,22 +258,22 @@ class ETNGenerator(nn.Module):
             root_offset = glob_root - target_root_pos
             quat_offsets = quats - target_quats
 
-            output_frames.append(t.cat([root, quats], dim=1))
+            output_poses.append(t.cat([root, quats], dim=1))
             sequence_contacts.append(contacts)
 
         # Generated transition is currently a list of tensors of (batch_size, frame_size) of len=transition_length,
         #   so must be stacked to be (batch_size, transition_length, frame_size)
-        output_frames = t.stack(output_frames, dim=1)
+        output_poses = t.stack(output_poses, dim=1)
         sequence_contacts = t.stack(sequence_contacts, dim=1)
 
-        return output_frames, sequence_contacts
+        return output_poses, sequence_contacts
 
-    def __loss(self, frames, gt_frames, contacts, gt_contacts, positions, gt_positions):
+    def __loss(self, poses, gt_poses, contacts, gt_contacts, positions, gt_positions):
         """
         Calculates loss between predicted transition and ground-truth (gt) frames.
 
-        :param frames: Predicted transition frames (root vel + local quats)
-        :param gt_frames: Ground truth frames
+        :param poses: Predicted transition frames (root vel + local quats)
+        :param gt_poses: Ground truth frames
         :param contacts: Predicted contact info
         :param gt_contacts: Ground truth contact info
         :param positions: Predicted global joint positions
@@ -278,7 +282,7 @@ class ETNGenerator(nn.Module):
         """
         mae = lambda x, y: t.mean(t.abs(y - x))  # Mean absolute error (MAE)
 
-        loss = mae(frames, gt_frames)
+        loss = mae(poses, gt_poses) # rvels + quats
         loss += mae(contacts, gt_contacts) * self.LOSS_MODIFIER_G
         loss += mae(positions, gt_positions) * self.LOSS_MODIFIER_P
         return loss
@@ -296,7 +300,7 @@ class ETNGenerator(nn.Module):
         root, quats, root_offsets, quat_offsets, target_quats, ground_truth, global_positions, \
             contacts, labels = [b.float().to(self.device) for b in batch]
         with t.no_grad():
-            pred_quats, out_contacts = self.__forward(
+            pred_poses, out_contacts = self.__forward(
                 root_in=root[:, :10],
                 quats_in=quats[:, :10],
                 root_offset_in=root_offsets[:, :10],
@@ -305,12 +309,13 @@ class ETNGenerator(nn.Module):
                 contacts_in=contacts[:, :10],
                 target_root_pos=-root_offsets[:, 0]
             )
-
-            pred_positions = self.__fk(pred_quats)
+            fk_poses = pred_poses
+            fk_poses[:, :, :3] = torch.tensor([0,0,0])
+            pred_positions = self.__fk(fk_poses)
 
             loss = self.__loss(
-                frames=pred_quats,
-                gt_frames=ground_truth[:, 10:-1],  # skip last (target) frame
+                poses=pred_poses,
+                gt_poses=ground_truth[:, 10:-1],  # skip last (target) frame
                 contacts=out_contacts,
                 gt_contacts=contacts[:, 10:-1],  # skip last (target) frame
                 positions=pred_positions,
@@ -318,7 +323,7 @@ class ETNGenerator(nn.Module):
             )
         self.__report_loss(self.val_writer, loss)
 
-        return pred_positions, pred_quats, out_contacts
+        return pred_positions, pred_poses, out_contacts
 
     def __fk(self, frames):
         """
@@ -373,23 +378,25 @@ class ETNGenerator(nn.Module):
             self.train()
 
             # Extract batch info
-            root, quats, root_offsets, quat_offsets, target_quats, ground_truth, \
+            root, poses, root_offsets, quat_offsets, target_quats, ground_truth, \
                 global_positions, contacts, labels = [b.float().to(self.device) for b in next(data_iter)]
 
             # Generate sequence
-            poses, c = self.__forward(
+            pred_poses, pred_contacts = self.__forward(
                 root_in=root[:, :10],
-                quats_in=quats[:, :10],
+                quats_in=poses[:, :10],
                 root_offset_in=root_offsets[:, :10],
                 quat_offsets_in=quat_offsets[:, :10],
                 target_quats=target_quats,
                 contacts_in=contacts[:, :10],
                 target_root_pos=-root_offsets[:, 0]
             )
-            glob_poses = self.__fk(poses)
+            fk_poses = pred_poses
+            fk_poses[:, :, :3] = torch.tensor([0, 0, 0])
+            glob_poses = self.__fk(fk_poses)
 
             # Calculate loss
-            loss = self.__loss(poses, ground_truth[:, 10:-1], c, contacts[:, 10:-1], glob_poses, global_positions[:, 10:-1])  # skipping last (target) frames
+            loss = self.__loss(pred_poses, ground_truth[:, 10:-1], pred_contacts, contacts[:, 10:-1], glob_poses, global_positions[:, 10:-1])  # skipping last (target) frames
             assert t.isfinite(loss), f"loss is not finite: {loss}"
 
             # Backpropagate and optimize
@@ -429,4 +436,8 @@ class ETNGenerator(nn.Module):
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.batch_idx = checkpoint["batch_idx"]
 
+    def torch_denorm(self, tensor, mean, std):
+        return torch.tensor([self.torch_denorm_s(vector, mean, std) for vector in vectors])
 
+    def torch_denorm_s(self,val, mean, std):
+        return t.mul(val, std) + mean
