@@ -40,7 +40,6 @@ class ETNGenerator(nn.Module):
                 past_contacts: t.Tensor,
                 target_root_pos: t.Tensor,
                 target_quats: t.Tensor,
-                init_root_pos: t.Tensor,
                 pred_weights,
                 pred_bias
                 ):
@@ -48,7 +47,6 @@ class ETNGenerator(nn.Module):
         lstm_state = None  # TODO: hidden state initializer here
         pred_poses = list()
         pred_contacts = list()
-        glob_root = init_root_pos
 
         # Declaring vars to be assigned in for-loop to prevent compiler warnings
         next_rvel = None
@@ -57,6 +55,7 @@ class ETNGenerator(nn.Module):
         next_root_offset = None
         next_quat_offsets = None
         lstm_states = None
+        glob_root = None
 
         # Initialize with past-context
         for past_idx in range(10):
@@ -71,7 +70,10 @@ class ETNGenerator(nn.Module):
                 pred_weights=pred_weights,
                 pred_bias=pred_bias
             )
-            glob_root += past_root_vel[:, past_idx]  # NOTE: MIGHT BE ONE FRAME OFF
+            if glob_root is None:
+                glob_root = past_root_vel[:, past_idx]
+            else:
+                glob_root += past_root_vel[:, past_idx]
             next_root_offset = glob_root - target_root_pos
             next_quat_offsets = next_quats - target_quats
 
@@ -99,7 +101,7 @@ class ETNGenerator(nn.Module):
             next_root_offset = glob_root - target_root_pos
             next_quat_offsets = next_quats - target_quats
 
-            pred_poses.append(t.cat([glob_root, next_quats], dim=1))
+            pred_poses.append(t.cat([next_rvel, next_quats], dim=1))
             pred_contacts.append(next_contacts)
 
         # Generated transition is currently a list of tensors of (batch_size, frame_size) of len=transition_length,

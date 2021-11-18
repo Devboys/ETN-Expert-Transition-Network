@@ -158,7 +158,7 @@ class ETNDataset(IterableDataset):
         animation = animation[1:]  # skip first frame because root_vel cant be calculated
 
         quats = animation[:, 3:]
-        global_positions = self.extract_glob_positions(animation)
+        global_positions = self.extract_glob_positions(animation, True)
         pos = global_positions.reshape((len(global_positions), self.hierarchy.bone_count(), 3))
         contacts = self.extract_feet_contacts(pos)
 
@@ -201,10 +201,12 @@ class ETNDataset(IterableDataset):
         root_vel = [frames[i][:3] - frames[i - 1][:3] for i in range(1, len(frames))]
         return np.asarray(root_vel)
 
-    def extract_glob_positions(self, frames) -> np.ndarray:
+    def extract_glob_positions(self, frames, in_root_space) -> np.ndarray:
         fk_offsets = np.repeat(self.hierarchy.bone_offsets.reshape([1, self.hierarchy.bone_count(), 3]),
                                len(frames), 0)
         fk_pose = frames  # concatenated (root_pos, joint_rots)
+        if in_root_space:
+            fk_pose[:, :3] = [0, 0, 0]
         global_positions = np_forward_kinematics_batch(
             offsets=fk_offsets,
             pose=fk_pose,

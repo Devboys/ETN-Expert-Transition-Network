@@ -170,7 +170,6 @@ class ETNModel(nn.Module):
             past_contacts=contacts[:, :10],
             target_quats=target_quats,
             target_root_pos=root_offsets[:, 0],
-            init_root_pos=glob_pos[:, 0, :3],
             pred_weights=pred_weights,
             pred_bias=pred_bias
         )
@@ -187,6 +186,7 @@ class ETNModel(nn.Module):
         batch_size, frame_count, channels = frames.shape
         # Merge dimensions 0 & 1 to make one batch
         frames = frames.view(-1, channels)
+        frames[:, :3] = torch.tensor([0, 0, 0])
         # Do FK
         frames = utils_fk.torch_forward_kinematics_batch(
             offsets=torch.cat(frame_count * [self.bone_offsets]),
