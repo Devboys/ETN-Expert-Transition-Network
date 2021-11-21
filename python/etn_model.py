@@ -23,8 +23,8 @@ class ETNModel(nn.Module):
         self.batch_size = batch_size
 
         # Loss Vars
-        self.LOSS_MODIFIER_Q = 1  # quat loss mod
-        self.LOSS_MODIFIER_G = 0.1  # contact loss mod
+        self.LOSS_MODIFIER_Q = 30  # quat loss mod
+        self.LOSS_MODIFIER_G = 25  # contact loss mod
         self.LOSS_MODIFIER_P = 0.5  # position loss mod
 
         # FK Vars

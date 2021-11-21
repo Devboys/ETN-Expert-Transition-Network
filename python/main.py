@@ -40,7 +40,7 @@ def run(base_dir, is_param_optimizing: bool):
         power = -3 * np.random.rand()
         learning_rate = 10**(-1 + power)
 
-    model_name = f"etn_{model_id}_bs{str(minibatch_size)}_ne{str(n_epochs)}_lr{str(learning_rate)}_test.pt"
+    model_name = f"etn_{model_id}_bs{str(minibatch_size)}_ne{str(n_epochs)}_lr{str(learning_rate)}_moreQuatLoss.pt"
     model_path = model_dir + model_name
 
     train_data = ETNDataset(train_dir, past_length=PST_LENGTH, transition_length=SEQ_LENGTH)
